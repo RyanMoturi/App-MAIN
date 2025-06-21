@@ -17,17 +17,6 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-/* API route to get users
-app.get('/users', (req, res) => {
-  db.query('SELECT * FROM users', (err, results) => {
-    if (err) {
-      console.error('Error fetching users:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(results);
-  });
-});*/
-
 // 🔐 SIGNUP ROUTE
 app.post('/signup', async (req, res) => {
   const { name, email, phone, password_hash } = req.body;
@@ -49,16 +38,36 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-/* API route to get list of available jobs
-app.get('/jobs', (req, res) => {
-  db.query('SELECT * FROM jobs', (err, results) => {
+// 🔐 LOGIN ROUTE
+app.post('/login', (req, res) => {
+  const { email, password} = req.body;
+
+  const query = 'SELECT * FROM users WHERE email = ?';
+  db.query(query, [email], async (err, results) => {
     if (err) {
-      console.error('Error fetching jobs:', err);
-      return res.status(500).json({ error: 'Database error' });
+      console.error('Login error:', err);
+      return res.status(500).json({ error: 'Login failed' });
     }
-    res.json(results);
+
+    if (results.length === 0) {
+      return res.status(400).json({ error: 'User not found' });
+    }
+
+    const user = results[0];
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    res.status(200).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    });
   });
-}); */
+});
+
 
 // Start server
 app.listen(PORT, () => {

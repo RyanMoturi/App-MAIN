@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // ✅ for redirection
 
 const Signup = () => {
+  const navigate = useNavigate(); // ✅ react-router hook
+  const [role, setRole] = useState('client'); // default to client
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    password: ''
+    password: '',
+    skills: ''
   });
 
   const handleChange = (e) => {
@@ -26,7 +30,9 @@ const Signup = () => {
           name: formData.name,
           email: formData.email,
           phone: formData.phone,
-          password_hash: formData.password  // this is hashed in backend
+          password_hash: formData.password,
+          role: role,
+          ...(role === 'fundi' && { skills: formData.skills })
         })
       });
 
@@ -34,6 +40,14 @@ const Signup = () => {
 
       if (response.ok) {
         alert('Signup successful!');
+
+        // ✅ Redirect based on role
+        if (role === 'fundi') {
+          navigate('/fundi-dashboard');
+        } else {
+          navigate('/client-dashboard');
+        }
+
       } else {
         alert(`Signup failed: ${data.error}`);
       }
@@ -44,17 +58,37 @@ const Signup = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
       <div className="w-full max-w-md bg-white rounded p-6 shadow-md">
-        <h2 className="text-2xl font-bold mb-4">Signup</h2>
+        <h2 className="text-2xl font-bold mb-4">Sign Up</h2>
+
+        {/* Role Toggle Buttons */}
+        <div className="flex justify-center mb-4 space-x-4">
+          <button
+            type="button"
+            onClick={() => setRole('client')}
+            className={`px-4 py-2 rounded ${role === 'client' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          >
+            Client
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('fundi')}
+            className={`px-4 py-2 rounded ${role === 'fundi' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          >
+            Fundi
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit}>
           <input
             type="text"
             name="name"
-            placeholder="Name"
+            placeholder="Full Name"
             value={formData.name}
             onChange={handleChange}
             className="w-full border p-2 mb-3 rounded"
+            required
           />
           <input
             type="email"
@@ -63,6 +97,7 @@ const Signup = () => {
             value={formData.email}
             onChange={handleChange}
             className="w-full border p-2 mb-3 rounded"
+            required
           />
           <input
             type="text"
@@ -71,6 +106,7 @@ const Signup = () => {
             value={formData.phone}
             onChange={handleChange}
             className="w-full border p-2 mb-3 rounded"
+            required
           />
           <input
             type="password"
@@ -79,12 +115,26 @@ const Signup = () => {
             value={formData.password}
             onChange={handleChange}
             className="w-full border p-2 mb-3 rounded"
+            required
           />
+
+          {/* Fundi-only field */}
+          {role === 'fundi' && (
+            <input
+              type="text"
+              name="skills"
+              placeholder="Your Skills (e.g., plumbing, electrical)"
+              value={formData.skills}
+              onChange={handleChange}
+              className="w-full border p-2 mb-3 rounded"
+            />
+          )}
+
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white p-2 rounded"
+            className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
           >
-            Signup
+            Sign Up as {role.charAt(0).toUpperCase() + role.slice(1)}
           </button>
         </form>
       </div>

@@ -37,7 +37,14 @@ const Signup = () => {
 
       if (response.ok) {
         alert('Signup successful!');
-        navigate(role === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
+
+        // ✅ Store JWT in localStorage
+        localStorage.setItem('token', data.token);
+
+        // ✅ Decode token and redirect
+        const decoded = JSON.parse(atob(data.token.split('.')[1]));
+        const userRole = decoded.role;
+        navigate(userRole === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
       } else {
         alert(`Signup failed: ${data.error}`);
       }

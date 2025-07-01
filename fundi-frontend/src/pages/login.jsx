@@ -23,7 +23,14 @@ const Login = () => {
 
       if (response.ok) {
         alert('Login successful!');
-        navigate(data.role === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
+
+        // ✅ Store JWT in localStorage
+        localStorage.setItem('token', data.token);
+
+        // ✅ Redirect based on user role
+        const decoded = JSON.parse(atob(data.token.split('.')[1])); // decode payload
+        const role = decoded.role;
+        navigate(role === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
       } else {
         alert(`Login failed: ${data.error}`);
       }

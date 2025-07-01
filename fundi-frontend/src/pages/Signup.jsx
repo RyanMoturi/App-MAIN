@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // ✅ for redirection
+import { useNavigate } from 'react-router-dom';
 
 const Signup = () => {
-  const navigate = useNavigate(); // ✅ react-router hook
-  const [role, setRole] = useState('client'); // default to client
+  const navigate = useNavigate();
+  const [role, setRole] = useState('client');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -13,10 +13,7 @@ const Signup = () => {
   });
 
   const handleChange = (e) => {
-    setFormData({ 
-      ...formData, 
-      [e.target.name]: e.target.value 
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
@@ -40,99 +37,54 @@ const Signup = () => {
 
       if (response.ok) {
         alert('Signup successful!');
-
-        // ✅ Redirect based on role
-        if (role === 'fundi') {
-          navigate('/fundi-dashboard');
-        } else {
-          navigate('/client-dashboard');
-        }
-
+        navigate(role === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
       } else {
         alert(`Signup failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Something went wrong. Please try again.');
+      console.error('Signup error:', error);
+      alert('Something went wrong.');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
-      <div className="w-full max-w-md bg-white rounded p-6 shadow-md">
-        <h2 className="text-2xl font-bold mb-4">Sign Up</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-md">
+        <h2 className="text-2xl font-bold text-center mb-6">Create an Account</h2>
 
-        {/* Role Toggle Buttons */}
-        <div className="flex justify-center mb-4 space-x-4">
+        <div className="flex justify-center gap-4 mb-4">
           <button
             type="button"
             onClick={() => setRole('client')}
-            className={`px-4 py-2 rounded ${role === 'client' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            className={`px-4 py-2 rounded-full border ${role === 'client' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
           >
             Client
           </button>
           <button
             type="button"
             onClick={() => setRole('fundi')}
-            className={`px-4 py-2 rounded ${role === 'fundi' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            className={`px-4 py-2 rounded-full border ${role === 'fundi' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
           >
             Fundi
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            name="name"
-            placeholder="Full Name"
-            value={formData.name}
-            onChange={handleChange}
-            className="w-full border p-2 mb-3 rounded"
-            required
-          />
-          <input
-            type="email"
-            name="email"
-            placeholder="Email"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full border p-2 mb-3 rounded"
-            required
-          />
-          <input
-            type="text"
-            name="phone"
-            placeholder="Phone Number"
-            value={formData.phone}
-            onChange={handleChange}
-            className="w-full border p-2 mb-3 rounded"
-            required
-          />
-          <input
-            type="password"
-            name="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full border p-2 mb-3 rounded"
-            required
-          />
-
-          {/* Fundi-only field */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input type="text" name="name" placeholder="Full Name" value={formData.name} onChange={handleChange}
+            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange}
+            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          <input type="text" name="phone" placeholder="Phone Number" value={formData.phone} onChange={handleChange}
+            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          <input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange}
+            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
           {role === 'fundi' && (
-            <input
-              type="text"
-              name="skills"
-              placeholder="Your Skills (e.g., plumbing, electrical)"
-              value={formData.skills}
-              onChange={handleChange}
-              className="w-full border p-2 mb-3 rounded"
-            />
+            <input type="text" name="skills" placeholder="Skills (comma-separated)" value={formData.skills} onChange={handleChange}
+              className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
           )}
-
           <button
             type="submit"
-            className="w-full bg-green-600 text-white p-2 rounded hover:bg-green-700"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded"
           >
             Sign Up as {role.charAt(0).toUpperCase() + role.slice(1)}
           </button>

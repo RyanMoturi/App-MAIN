@@ -4,6 +4,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs'); // Keep this only
 const db = require('./db');
 const jwt = require('jsonwebtoken');
+const jobRoutes = require('./jobRoutes');
 
 const SECRET_KEY = 'your_secret_key'; // 🔒 Store in .env in production
 
@@ -88,6 +89,8 @@ const authenticateJWT = (req, res, next) => {
 app.get('/dashboard', authenticateJWT, (req, res) => {
   res.json({ message: `Welcome ${req.user.name}, your role is ${req.user.role}` });
 });
+
+app.use('/api', jobRoutes);
 
 // ✅ Start Server
 app.listen(PORT, () => {

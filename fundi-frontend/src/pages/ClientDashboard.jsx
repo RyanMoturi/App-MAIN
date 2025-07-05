@@ -1,8 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-
+import PostJob from './PostJob';
 
 const ClientDashboard = () => {
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [message, setMessage] = useState('');
+  
+  // TODO: Replace this with dynamic user ID from auth
+  const clientId = 1;
+
+  const handlePostJob = async (jobData) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...jobData, client_id: clientId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage('✅ Job posted successfully!');
+        setShowPostForm(false); // Hide form after success
+      } else {
+        setMessage('❌ Failed to post job: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Post Job Error:', error);
+      setMessage('❌ Server error while posting job.');
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-4">Welcome, Client!</h1>
@@ -12,8 +40,11 @@ const ClientDashboard = () => {
         <div className="bg-white shadow-md rounded-2xl p-5">
           <h2 className="text-xl font-semibold mb-2">Need a Fundi?</h2>
           <p className="mb-4">Quickly request a service for your home or office needs.</p>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-            Request Service
+          <button
+            onClick={() => setShowPostForm(!showPostForm)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            {showPostForm ? 'Cancel' : 'Request Service'}
           </button>
         </div>
 
@@ -39,6 +70,17 @@ const ClientDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Post Job Form Section */}
+      {showPostForm && (
+        <div className="mt-6">
+          <h2 className="text-2xl font-bold mb-4">Post a New Job</h2>
+          <PostJob onSubmit={handlePostJob} />
+        </div>
+      )}
+
+      {/* Feedback Message */}
+      {message && <p className="mt-4 text-center text-sm font-medium text-blue-700">{message}</p>}
     </div>
   );
 };

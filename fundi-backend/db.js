@@ -1,19 +1,19 @@
 // db.js
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise'); // ✅ Use promise-based MySQL
 
-const connection = mysql.createConnection({
+const pool = mysql.createPool({
   host: 'localhost',        // ✅ Localhost instead of fundi_connection
   user: 'root',
   password: '1a2bacadae',
   database: 'fundi_app',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-connection.connect((err) => {
-  if (err) {
-    console.error('Database connection failed: ' + err.stack);
-    return;
-  }
-  console.log('✅ Connected to database.');
-});
+// Optional: test connection on startup
+pool.getConnection()
+  .then(() => console.log('✅ Connected to database.'))
+  .catch(err => console.error('❌ DB Connection Error:', err));
 
-module.exports = connection;
+module.exports = pool;

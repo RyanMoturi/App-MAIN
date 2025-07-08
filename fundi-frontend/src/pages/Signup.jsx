@@ -7,9 +7,11 @@ const Signup = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    phone: '',
+    phone_number: '',
     password: '',
-    skills: ''
+    skills: '',
+    bio: '',
+    location: ''
   });
 
   const handleChange = (e) => {
@@ -19,32 +21,41 @@ const Signup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const endpoint =
+      role === 'fundi'
+        ? 'http://localhost:5000/api/auth/signup/fundi'
+        : 'http://localhost:5000/api/auth/signup/client';
+
+    const payload =
+      role === 'fundi'
+        ? {
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            skill: formData.skills,
+            bio: formData.bio,
+            location: formData.location
+          }
+        : {
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            location: formData.location,
+            phone_number: formData.phone_number
+          };
+
     try {
-      const response = await fetch('http://localhost:5000/signup', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          password_hash: formData.password,
-          role: role,
-          ...(role === 'fundi' && { skills: formData.skills })
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
 
       if (response.ok) {
         alert('Signup successful!');
-
-        // ✅ Store JWT in localStorage
-        localStorage.setItem('token', data.token);
-
-        // ✅ Decode token and redirect
-        const decoded = JSON.parse(atob(data.token.split('.')[1]));
-        const userRole = decoded.role;
-        navigate(userRole === 'fundi' ? '/fundi-dashboard' : '/client-dashboard');
+        navigate('/login');
       } else {
         alert(`Signup failed: ${data.error}`);
       }
@@ -81,14 +92,25 @@ const Signup = () => {
             className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
           <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange}
             className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          <input type="text" name="phone" placeholder="Phone Number" value={formData.phone} onChange={handleChange}
+          <input type="text" name="location" placeholder="Location" value={formData.location} onChange={handleChange}
             className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
           <input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange}
             className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          {role === 'fundi' && (
-            <input type="text" name="skills" placeholder="Skills (comma-separated)" value={formData.skills} onChange={handleChange}
-              className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" />
+
+          {role === 'client' && (
+            <input type="text" name="phone_number" placeholder="Phone Number" value={formData.phone_number} onChange={handleChange}
+              className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
           )}
+
+          {role === 'fundi' && (
+            <>
+              <input type="text" name="skills" placeholder="Skill (e.g. Plumbing)" value={formData.skills} onChange={handleChange}
+                className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" required />
+              <textarea name="bio" placeholder="Brief Bio" value={formData.bio} onChange={handleChange}
+                className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" required />
+            </>
+          )}
+
           <button
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded"

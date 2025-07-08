@@ -1,86 +1,177 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import PostJob from './PostJob';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+const TABS = ['My Jobs', 'Find Fundis', 'Messages', 'Notifications', 'Profile'];
+
+const mockJobs = [
+  { id: 1, title: 'Fix Sink', status: 'Open', applications: [
+    { id: 1, fundi: 'Jane Mwangi', skill: 'Plumbing', message: 'Experienced plumber, ready to help!', status: 'pending' },
+    { id: 2, fundi: 'Peter Otieno', skill: 'Plumbing', message: 'Can come today!', status: 'pending' }
+  ] },
+  { id: 2, title: 'Paint Living Room', status: 'In Progress', applications: [
+    { id: 3, fundi: 'Mary Wanjiku', skill: 'Painting', message: 'I have 5 years experience.', status: 'accepted' }
+  ] },
+  { id: 3, title: 'Install Lights', status: 'Completed', applications: [] }
+];
+
+const mockFundis = [
+  { id: 1, name: 'Jane Mwangi', skill: 'Plumbing', rating: 4.9, location: 'Nairobi' },
+  { id: 2, name: 'Mary Wanjiku', skill: 'Painting', rating: 4.7, location: 'Kisumu' }
+];
+
+const mockMessages = [
+  { id: 1, from: 'Jane Mwangi', content: 'I can start tomorrow!', job: 'Fix Sink' },
+  { id: 2, from: 'Mary Wanjiku', content: 'Do you have a color preference?', job: 'Paint Living Room' }
+];
+
+const mockNotifications = [
+  { id: 1, content: 'Jane Mwangi applied for your job: Fix Sink' },
+  { id: 2, content: 'Mary Wanjiku was accepted for your job: Paint Living Room' }
+];
 
 const ClientDashboard = () => {
-  const [showPostForm, setShowPostForm] = useState(false);
-  const [message, setMessage] = useState('');
-  
-  // TODO: Replace this with dynamic user ID from auth
-  const clientId = 1;
+  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [jobs, setJobs] = useState(mockJobs);
+  const [fundis] = useState(mockFundis);
+  const [messages] = useState(mockMessages);
+  const [notifications] = useState(mockNotifications);
+  const navigate = useNavigate();
 
-  const handlePostJob = async (jobData) => {
-    try {
-      const response = await fetch('http://localhost:5000/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...jobData, client_id: clientId }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setMessage('✅ Job posted successfully!');
-        setShowPostForm(false); // Hide form after success
-      } else {
-        setMessage('❌ Failed to post job: ' + (data.error || 'Unknown error'));
-      }
-    } catch (error) {
-      console.error('Post Job Error:', error);
-      setMessage('❌ Server error while posting job.');
+  useEffect(() => {
+    const role = localStorage.getItem('role');
+    if (role !== 'client') {
+      navigate('/login');
     }
+  }, [navigate]);
+
+  // Job management actions (edit, cancel, mark complete, accept/reject application)
+  const handleJobAction = (jobId, action) => {
+    setJobs(jobs => jobs.map(job => job.id === jobId ? { ...job, status: action } : job));
+  };
+  const handleApplicationAction = (jobId, appId, action) => {
+    setJobs(jobs => jobs.map(job => job.id === jobId ? {
+      ...job,
+      applications: job.applications.map(app => app.id === appId ? { ...app, status: action } : app)
+    } : job));
   };
 
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-3xl font-bold mb-4">Welcome, Client!</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Request Service Card */}
-        <div className="bg-white shadow-md rounded-2xl p-5">
-          <h2 className="text-xl font-semibold mb-2">Need a Fundi?</h2>
-          <p className="mb-4">Quickly request a service for your home or office needs.</p>
+      <h1 className="text-3xl font-bold mb-4">Client Dashboard</h1>
+      <div className="flex gap-4 mb-6">
+        {TABS.map(tab => (
           <button
-            onClick={() => setShowPostForm(!showPostForm)}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            key={tab}
+            className={`px-4 py-2 rounded ${activeTab === tab ? 'bg-black text-white' : 'bg-white text-black border'}`}
+            onClick={() => setActiveTab(tab)}
           >
-            {showPostForm ? 'Cancel' : 'Request Service'}
+            {tab}
           </button>
-        </div>
-
-        {/* Current Job Status */}
-        <div className="bg-white shadow-md rounded-2xl p-5">
-          <h2 className="text-xl font-semibold mb-2">Ongoing Jobs</h2>
-          <p className="text-gray-600">You have 1 active request with John the Electrician.</p>
-        </div>
-
-        {/* Recommended Fundis */}
-        <div className="bg-white shadow-md rounded-2xl p-5 md:col-span-2">
-          <h2 className="text-xl font-semibold mb-4">Recommended Fundis</h2>
-          <div className="flex space-x-4 overflow-x-auto">
-            {[1, 2, 3].map((fundi) => (
-              <div key={fundi} className="bg-gray-200 p-4 rounded-lg w-64">
-                <h3 className="font-bold">Fundi Name</h3>
-                <p className="text-sm text-gray-700">Skill: Plumbing</p>
-                <button className="mt-2 bg-green-600 text-white px-3 py-1 rounded">
-                  View Profile
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
-
-      {/* Post Job Form Section */}
-      {showPostForm && (
-        <div className="mt-6">
-          <h2 className="text-2xl font-bold mb-4">Post a New Job</h2>
-          <PostJob onSubmit={handlePostJob} />
+      {/* Tab Content */}
+      {activeTab === 'My Jobs' && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">My Jobs</h2>
+          <ul className="space-y-4">
+            {jobs.map(job => (
+              <li key={job.id} className="bg-white rounded shadow p-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="font-bold">{job.title}</span> <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {job.status === 'Open' && <button className="bg-blue-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Cancelled')}>Cancel</button>}
+                    {job.status === 'In Progress' && <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Completed')}>Mark Complete</button>}
+                  </div>
+                </div>
+                {/* Applications */}
+                {job.applications.length > 0 && (
+                  <div className="mt-2">
+                    <div className="font-semibold">Applications:</div>
+                    <ul className="space-y-2">
+                      {job.applications.map(app => (
+                        <li key={app.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                          <div>
+                            <span className="font-bold">{app.fundi}</span> ({app.skill}) - {app.message}
+                          </div>
+                          <div className="flex gap-2">
+                            {app.status === 'pending' && <>
+                              <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'accepted')}>Accept</button>
+                              <button className="bg-red-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'rejected')}>Reject</button>
+                            </>}
+                            {app.status !== 'pending' && <span className="text-sm text-gray-500">{app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-
-      {/* Feedback Message */}
-      {message && <p className="mt-4 text-center text-sm font-medium text-blue-700">{message}</p>}
+      {activeTab === 'Find Fundis' && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Find Fundis</h2>
+          <ul className="space-y-4">
+            {fundis.map(fundi => (
+              <li key={fundi.id} className="bg-white rounded shadow p-4 flex justify-between items-center">
+                <div>
+                  <span className="font-bold">{fundi.name}</span> - {fundi.skill} <span className="ml-2 text-yellow-500">⭐ {fundi.rating}</span>
+                  <div className="text-sm text-gray-500">{fundi.location}</div>
+                </div>
+                <button className="bg-blue-600 text-white px-2 py-1 rounded">View Profile</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {activeTab === 'Messages' && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Messages</h2>
+          <ul className="space-y-4">
+            {messages.map(msg => (
+              <li key={msg.id} className="bg-white rounded shadow p-4">
+                <div className="font-bold">From: {msg.from}</div>
+                <div className="text-gray-700">{msg.content}</div>
+                <div className="text-sm text-gray-500">Regarding: {msg.job}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {activeTab === 'Notifications' && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Notifications</h2>
+          <ul className="space-y-2">
+            {notifications.map(note => (
+              <li key={note.id} className="bg-white rounded shadow p-3">{note.content}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {activeTab === 'Profile' && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">My Profile</h2>
+          <div className="bg-white rounded shadow p-6">
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">Name</label>
+              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" value="John Doe" readOnly />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
+              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="email" value="john@example.com" readOnly />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">Role</label>
+              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" value="Client" readOnly />
+            </div>
+            <button className="bg-black hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled>Edit Profile</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

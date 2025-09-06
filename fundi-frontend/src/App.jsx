@@ -11,7 +11,7 @@ import Contact from './pages/Contact';
 import JobList from './pages/JobList';
 import JobDetails from './pages/JobDetails';
 import Profile from './pages/Profile';
-import NotFound from './pages/NotFound';
+import PostJob from './pages/PostJob';
 
 const App = () => (
   <>
@@ -27,7 +27,7 @@ const App = () => (
       <Route path="/signup" element={<Signup />} />
       <Route path="/client-dashboard" element={<ClientDashboard />} />
       <Route path="/fundi-dashboard" element={<FundiDashboard />} />
-      <Route path="*" element={<NotFound />} />
+      <Route path="/post-job" element={<PostJob />} />
     </Routes>
   </>
 );

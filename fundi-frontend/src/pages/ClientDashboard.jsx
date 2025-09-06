@@ -1,29 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PostJob from './PostJob';
 
 const TABS = ['My Jobs', 'Find Fundis', 'Messages', 'Notifications', 'Profile'];
-
-const mockJobs = [
-  { id: 1, title: 'Fix Sink', status: 'Open', applications: [
-    { id: 1, fundi: 'Jane Mwangi', skill: 'Plumbing', message: 'Experienced plumber, ready to help!', status: 'pending' },
-    { id: 2, fundi: 'Peter Otieno', skill: 'Plumbing', message: 'Can come today!', status: 'pending' }
-  ] },
-  { id: 2, title: 'Paint Living Room', status: 'In Progress', applications: [
-    { id: 3, fundi: 'Mary Wanjiku', skill: 'Painting', message: 'I have 5 years experience.', status: 'accepted' }
-  ] },
-  { id: 3, title: 'Install Lights', status: 'Completed', applications: [] }
-];
 
 const mockFundis = [
   { id: 1, name: 'Jane Mwangi', skill: 'Plumbing', rating: 4.9, location: 'Nairobi' },
   { id: 2, name: 'Mary Wanjiku', skill: 'Painting', rating: 4.7, location: 'Kisumu' }
 ];
-
 const mockMessages = [
   { id: 1, from: 'Jane Mwangi', content: 'I can start tomorrow!', job: 'Fix Sink' },
   { id: 2, from: 'Mary Wanjiku', content: 'Do you have a color preference?', job: 'Paint Living Room' }
 ];
-
 const mockNotifications = [
   { id: 1, content: 'Jane Mwangi applied for your job: Fix Sink' },
   { id: 2, content: 'Mary Wanjiku was accepted for your job: Paint Living Room' }
@@ -31,7 +19,10 @@ const mockNotifications = [
 
 const ClientDashboard = () => {
   const [activeTab, setActiveTab] = useState(TABS[0]);
-  const [jobs, setJobs] = useState(mockJobs);
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [jobsError, setJobsError] = useState(null);
+  const [showPostJob, setShowPostJob] = useState(false);
   const [fundis] = useState(mockFundis);
   const [messages] = useState(mockMessages);
   const [notifications] = useState(mockNotifications);
@@ -44,8 +35,34 @@ const ClientDashboard = () => {
     }
   }, [navigate]);
 
+  // Fetch jobs posted by this client
+  const fetchJobs = async () => {
+    setLoadingJobs(true);
+    setJobsError(null);
+    try {
+      const clientId = localStorage.getItem('clientId');
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/client/${clientId}/jobs`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch jobs');
+      const data = await res.json();
+      setJobs(data);
+    } catch (err) {
+      setJobsError('Failed to load jobs');
+    } finally {
+      setLoadingJobs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'My Jobs') fetchJobs();
+  }, [activeTab]);
+
   // Job management actions (edit, cancel, mark complete, accept/reject application)
+  // These would call backend endpoints in a real app
   const handleJobAction = (jobId, action) => {
+    // Placeholder for job status update
     setJobs(jobs => jobs.map(job => job.id === jobId ? { ...job, status: action } : job));
   };
   const handleApplicationAction = (jobId, appId, action) => {
@@ -72,44 +89,64 @@ const ClientDashboard = () => {
       {/* Tab Content */}
       {activeTab === 'My Jobs' && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">My Jobs</h2>
-          <ul className="space-y-4">
-            {jobs.map(job => (
-              <li key={job.id} className="bg-white rounded shadow p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="font-bold">{job.title}</span> <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">My Jobs</h2>
+            <button
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+              onClick={() => setShowPostJob(v => !v)}
+            >
+              {showPostJob ? 'Cancel' : 'Post a Job'}
+            </button>
+          </div>
+          {showPostJob && <PostJob onSubmit={fetchJobs} />}
+          {loadingJobs ? (
+            <div className="text-center py-12">Loading jobs...</div>
+          ) : jobsError ? (
+            <div className="text-center text-red-600 py-12">{jobsError}</div>
+          ) : jobs.length === 0 ? (
+            <div className="text-center text-gray-500">No jobs posted yet.</div>
+          ) : (
+            <ul className="space-y-4">
+              {jobs.map(job => (
+                <li key={job.id} className="bg-white rounded shadow p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-bold">{job.title}</span> <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
+                    </div>
+                    <div className="flex gap-2">
+                      {job.status === 'Open' && <button className="bg-blue-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Cancelled')}>Cancel</button>}
+                      {job.status === 'In Progress' && <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Completed')}>Mark Complete</button>}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    {job.status === 'Open' && <button className="bg-blue-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Cancelled')}>Cancel</button>}
-                    {job.status === 'In Progress' && <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Completed')}>Mark Complete</button>}
-                  </div>
-                </div>
-                {/* Applications */}
-                {job.applications.length > 0 && (
-                  <div className="mt-2">
-                    <div className="font-semibold">Applications:</div>
-                    <ul className="space-y-2">
-                      {job.applications.map(app => (
-                        <li key={app.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-                          <div>
-                            <span className="font-bold">{app.fundi}</span> ({app.skill}) - {app.message}
-                          </div>
-                          <div className="flex gap-2">
-                            {app.status === 'pending' && <>
-                              <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'accepted')}>Accept</button>
-                              <button className="bg-red-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'rejected')}>Reject</button>
-                            </>}
-                            {app.status !== 'pending' && <span className="text-sm text-gray-500">{app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+                  {job.image_url && (
+                    <img src={job.image_url} alt="Job" className="w-full h-48 object-cover rounded mb-2" />
+                  )}
+                  {/* Applications would be fetched from backend in a real app */}
+                  {job.applications && job.applications.length > 0 && (
+                    <div className="mt-2">
+                      <div className="font-semibold">Applications:</div>
+                      <ul className="space-y-2">
+                        {job.applications.map(app => (
+                          <li key={app.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                            <div>
+                              <span className="font-bold">{app.fundi}</span> ({app.skill}) - {app.message}
+                            </div>
+                            <div className="flex gap-2">
+                              {app.status === 'pending' && <>
+                                <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'accepted')}>Accept</button>
+                                <button className="bg-red-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'rejected')}>Reject</button>
+                              </>}
+                              {app.status !== 'pending' && <span className="text-sm text-gray-500">{app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       {activeTab === 'Find Fundis' && (

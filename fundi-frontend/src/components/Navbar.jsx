@@ -31,7 +31,7 @@ const Navbar = () => {
         {role === 'fundi' && <Link to="/jobs" className="hover:text-yellow-400 transition">Job List</Link>}
         {/* Profile link for any logged-in user */}
         {loggedIn && <Link to="/profile" className="hover:text-yellow-400 transition">Profile</Link>}
-        {/* Dashboards by role */}
+        {/* Only show the dashboard for the correct role */}
         {role === 'client' && <Link to="/client-dashboard" className="hover:text-yellow-400 transition">Client Dashboard</Link>}
         {role === 'fundi' && <Link to="/fundi-dashboard" className="hover:text-yellow-400 transition">Fundi Dashboard</Link>}
         {/* Auth links */}

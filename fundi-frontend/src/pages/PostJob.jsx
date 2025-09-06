@@ -6,44 +6,58 @@ const PostJob = ({ onSubmit }) => {
     description: '',
     skillRequired: '',
     location: '',
+    image: null
   });
 
   const [successMessage, setSuccessMessage] = useState('');
   const [formVisible, setFormVisible] = useState(true);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, files } = e.target;
+    if (name === 'image') {
+      setFormData({ ...formData, image: files[0] });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const clientId = localStorage.getItem('clientId');
     if (!clientId) {
       alert('Client not logged in.');
       return;
     }
 
-    const jobData = {
-      ...formData,
-      clientId: parseInt(clientId),
-    };
+    const data = new FormData();
+    data.append('title', formData.title);
+    data.append('description', formData.description);
+    data.append('skillRequired', formData.skillRequired);
+    data.append('location', formData.location);
+    data.append('clientId', clientId);
+    if (formData.image) data.append('image', formData.image);
 
-    const result = await onSubmit(jobData);
+    const response = await fetch('/api/jobs', {
+      method: 'POST',
+      body: data,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    });
 
-    if (result?.success) {
+    if (response.ok) {
       setSuccessMessage('✅ Job posted successfully!');
       setFormVisible(false);
+      setFormData({
+        title: '',
+        description: '',
+        skillRequired: '',
+        location: '',
+        image: null
+      });
     } else {
       alert('❌ Failed to post job.');
     }
-
-    setFormData({
-      title: '',
-      description: '',
-      skillRequired: '',
-      location: '',
-    });
   };
 
   return (
@@ -54,7 +68,7 @@ const PostJob = ({ onSubmit }) => {
           <div className="mt-2 text-sm">
             <button
               className="text-blue-600 underline"
-              onClick={() => setFormVisible(true)}
+              onClick={() => { setFormVisible(true); setSuccessMessage(''); }}
             >
               Post another job
             </button>
@@ -70,7 +84,7 @@ const PostJob = ({ onSubmit }) => {
       )}
 
       {formVisible && (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" encType="multipart/form-data">
           <input
             name="title"
             placeholder="Job Title"
@@ -101,6 +115,13 @@ const PostJob = ({ onSubmit }) => {
             onChange={handleChange}
             value={formData.location}
             required
+            className="w-full border p-2 rounded"
+          />
+          <input
+            type="file"
+            name="image"
+            accept="image/*"
+            onChange={handleChange}
             className="w-full border p-2 rounded"
           />
           <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">

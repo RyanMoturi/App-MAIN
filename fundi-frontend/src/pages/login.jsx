@@ -34,6 +34,8 @@ const Login = () => {
 
         localStorage.setItem('token', data.token);
         localStorage.setItem('role', formData.role); // Store role for later use
+        // notify app of auth state change
+        window.dispatchEvent(new Event('authChanged'));
         alert('Login successful!');
         if (formData.role ==='client'){
           navigate('/client-dashboard');

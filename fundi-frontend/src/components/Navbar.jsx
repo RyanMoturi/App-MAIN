@@ -52,12 +52,6 @@ const Navbar = () => {
       <Link to="/" className="text-xl font-bold mr-8">Fundi-Link</Link>
       <div className="flex flex-wrap gap-4 items-center">
         <Link to="/" className="hover:text-yellow-400 transition">Home</Link>
-        <Link to="/about" className="hover:text-yellow-400 transition">About</Link>
-        <Link to="/contact" className="hover:text-yellow-400 transition">Contact</Link>
-        {/* Only fundis see Job List */}
-        {role === 'fundi' && <Link to="/jobs" className="hover:text-yellow-400 transition">Job List</Link>}
-        {/* Profile link for any logged-in user */}
-        {loggedIn && <Link to="/profile" className="hover:text-yellow-400 transition">Profile</Link>}
         {/* Show the correct dashboard link for the logged-in role; keep visible for clients when logged in */}
         {role === 'client' && loggedIn && (
           <Link to="/client-dashboard" className="hover:text-yellow-400 transition">Client Dashboard</Link>
@@ -65,6 +59,12 @@ const Navbar = () => {
         {role === 'fundi' && loggedIn && (
           <Link to="/fundi-dashboard" className="hover:text-yellow-400 transition">Fundi Dashboard</Link>
         )}
+         {/* Only fundis see Job List */}
+         {role === 'fundi' && <Link to="/jobs" className="hover:text-yellow-400 transition">Job List</Link>}
+        {/* Profile link for any logged-in user */}
+        {loggedIn && <Link to="/profile" className="hover:text-yellow-400 transition">Profile</Link>}
+        <Link to="/about" className="hover:text-yellow-400 transition">About</Link>
+        <Link to="/contact" className="hover:text-yellow-400 transition">Contact</Link>
         {/* Auth links hidden when logged in */}
         {!loggedIn && <Link to="/login" className="hover:text-yellow-400 transition">Login</Link>}
         {!loggedIn && <Link to="/signup" className="hover:text-yellow-400 transition">Signup</Link>}

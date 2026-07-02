@@ -6,10 +6,12 @@ import Login from './pages/login';
 import Signup from './pages/Signup';
 import ClientDashboard from './pages/ClientDashboard';
 import FundiDashboard from './pages/FundiDashboard';
+import AdminDashboard from "./pages/AdminDashboard";
 import JobList from './pages/JobList';
 import JobDetails from './pages/JobDetails';
 import Profile from './pages/Profile';
 import PostJob from './pages/PostJob';
+
 
 const App = () => (
   <>
@@ -23,6 +25,7 @@ const App = () => (
       <Route path="/signup" element={<Signup />} />
       <Route path="/client-dashboard" element={<ClientDashboard />} />
       <Route path="/fundi-dashboard" element={<FundiDashboard />} />
+      <Route path="/admin-dashboard" element={<AdminDashboard />} />
       <Route path="/post-job" element={<PostJob />} />
     </Routes>
   </>

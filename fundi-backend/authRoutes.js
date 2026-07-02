@@ -61,45 +61,82 @@ router.post('/signup/fundi', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password, role } = req.body;
 
-  if (!['client', 'fundi'].includes(role)) {
+  if (!['client', 'fundi', 'admin'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role specified' });
   }
 
-  const table = role === 'client' ? 'clients' : 'fundis';
+  let table;
+
+  if (role === 'client') {
+    table = 'clients';
+  } else if (role === 'fundi') {
+    table = 'fundis';
+  } else {
+    table = 'admins';
+  }
 
   try {
-    const [rows] = await db.query(`SELECT * FROM ${table} WHERE email = ?`, [email]);
+    const [rows] = await db.query(
+      `SELECT * FROM ${table} WHERE email = ?`,
+      [email]
+    );
 
-    if (rows.length === 0) return res.status(401).json({ error: 'User not found' });
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'User not found' });
+    }
 
     const user = rows[0];
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
-    if (!isMatch) return res.status(401).json({ error: 'Invalid password' });
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
 
-    const token = jwt.sign({ id: user.id, role }, jwtSecret, { expiresIn: '7d' });
+    const token = jwt.sign(
+      {
+        id: user.id,
+        role
+      },
+      jwtSecret,
+      {
+        expiresIn: '7d'
+      }
+    );
 
     const responsePayload = {
       message: 'Login successful',
       token,
       user: {
         id: user.id,
-        name: user.name,
         role,
-        email: user.email,
-        location: user.location,
+        email: user.email
       }
     };
 
     if (role === 'client') {
       responsePayload.clientId = user.id;
-    } else {
+      responsePayload.user.name = user.name;
+      responsePayload.user.location = user.location;
+    }
+
+    else if (role === 'fundi') {
       responsePayload.fundiId = user.id;
+      responsePayload.user.name = user.name;
+      responsePayload.user.location = user.location;
       responsePayload.user.skill = user.skill;
       responsePayload.user.bio = user.bio;
     }
 
+    else {
+      responsePayload.adminId = user.id;
+      responsePayload.user.name = user.full_name;
+      responsePayload.user.username = user.username;
+      responsePayload.user.role = user.role;
+    }
+
     res.status(200).json(responsePayload);
+
   } catch (err) {
     console.error('LOGIN ERROR:', err);
     res.status(500).json({ error: 'Server error during login' });

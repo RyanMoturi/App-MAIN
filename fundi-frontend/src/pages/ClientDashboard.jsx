@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import PostJob from './PostJob';
 
 const TABS = ['My Jobs', 'Find Fundis', 'Messages', 'Notifications', 'Profile'];
@@ -59,19 +59,6 @@ const ClientDashboard = () => {
     if (activeTab === 'My Jobs') fetchJobs();
   }, [activeTab]);
 
-  // Job management actions (edit, cancel, mark complete, accept/reject application)
-  // These would call backend endpoints in a real app
-  const handleJobAction = (jobId, action) => {
-    // Placeholder for job status update
-    setJobs(jobs => jobs.map(job => job.id === jobId ? { ...job, status: action } : job));
-  };
-  const handleApplicationAction = (jobId, appId, action) => {
-    setJobs(jobs => jobs.map(job => job.id === jobId ? {
-      ...job,
-      applications: job.applications.map(app => app.id === appId ? { ...app, status: action } : app)
-    } : job));
-  };
-
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold mb-4">Client Dashboard</h1>
@@ -108,41 +95,27 @@ const ClientDashboard = () => {
           ) : (
             <ul className="space-y-4">
               {jobs.map(job => (
-                <li key={job.id} className="bg-white rounded shadow p-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="font-bold">{job.title}</span> <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
+                <li key={job.id}>
+                  <Link
+                    to={`/jobs/${job.id}`}
+                    className="block bg-white rounded shadow p-4 hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-bold">{job.title}</span>
+                        {job.status && (
+                          <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
+                        )}
+                      </div>
+                      <span className="text-sm text-blue-600">View / Edit &rarr;</span>
                     </div>
-                    <div className="flex gap-2">
-                      {job.status === 'Open' && <button className="bg-blue-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Cancelled')}>Cancel</button>}
-                      {job.status === 'In Progress' && <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleJobAction(job.id, 'Completed')}>Mark Complete</button>}
-                    </div>
-                  </div>
-                  {job.image_url && (
-                    <img src={job.image_url} alt="Job" className="w-full h-48 object-cover rounded mb-2" />
-                  )}
-                  {/* Applications would be fetched from backend in a real app */}
-                  {job.applications && job.applications.length > 0 && (
-                    <div className="mt-2">
-                      <div className="font-semibold">Applications:</div>
-                      <ul className="space-y-2">
-                        {job.applications.map(app => (
-                          <li key={app.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
-                            <div>
-                              <span className="font-bold">{app.fundi}</span> ({app.skill}) - {app.message}
-                            </div>
-                            <div className="flex gap-2">
-                              {app.status === 'pending' && <>
-                                <button className="bg-green-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'accepted')}>Accept</button>
-                                <button className="bg-red-600 text-white px-2 py-1 rounded" onClick={() => handleApplicationAction(job.id, app.id, 'rejected')}>Reject</button>
-                              </>}
-                              {app.status !== 'pending' && <span className="text-sm text-gray-500">{app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                    {job.image_url && (
+                      <img src={job.image_url} alt="Job" className="w-full h-48 object-cover rounded mb-2 mt-2" />
+                    )}
+                    {job.description && (
+                      <p className="text-gray-600 text-sm mt-2 line-clamp-2">{job.description}</p>
+                    )}
+                  </Link>
                 </li>
               ))}
             </ul>

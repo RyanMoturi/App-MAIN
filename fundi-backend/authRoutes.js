@@ -1,6 +1,6 @@
 // authRoutes.js
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 require('dotenv').config();
@@ -85,13 +85,18 @@ router.post('/login', async (req, res) => {
       user: {
         id: user.id,
         name: user.name,
-        role
+        role,
+        email: user.email,
+        location: user.location,
       }
     };
 
-    // 👇 Add clientId directly if the role is client
     if (role === 'client') {
       responsePayload.clientId = user.id;
+    } else {
+      responsePayload.fundiId = user.id;
+      responsePayload.user.skill = user.skill;
+      responsePayload.user.bio = user.bio;
     }
 
     res.status(200).json(responsePayload);

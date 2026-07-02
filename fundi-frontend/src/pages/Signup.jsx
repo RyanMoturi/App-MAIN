@@ -23,8 +23,8 @@ const Signup = () => {
 
     const endpoint =
       role === 'fundi'
-        ? 'http://localhost:5000/api/auth/signup/fundi'
-        : 'http://localhost:5000/api/auth/signup/client';
+        ? 'http://localhost:5001/api/auth/signup/fundi'
+        : 'http://localhost:5001/api/auth/signup/client';
 
     const payload =
       role === 'fundi'

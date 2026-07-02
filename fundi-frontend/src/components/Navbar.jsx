@@ -63,8 +63,6 @@ const Navbar = () => {
          {role === 'fundi' && <Link to="/jobs" className="hover:text-yellow-400 transition">Job List</Link>}
         {/* Profile link for any logged-in user */}
         {loggedIn && <Link to="/profile" className="hover:text-yellow-400 transition">Profile</Link>}
-        <Link to="/about" className="hover:text-yellow-400 transition">About</Link>
-        <Link to="/contact" className="hover:text-yellow-400 transition">Contact</Link>
         {/* Auth links hidden when logged in */}
         {!loggedIn && <Link to="/login" className="hover:text-yellow-400 transition">Login</Link>}
         {!loggedIn && <Link to="/signup" className="hover:text-yellow-400 transition">Signup</Link>}

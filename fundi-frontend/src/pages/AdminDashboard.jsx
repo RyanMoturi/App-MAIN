@@ -1,140 +1,176 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
+  const [stats, setStats] = useState({
+    clients: 0,
+    fundis: 0,
+    jobs: 0,
+    skills: 0,
+    recentClients: [],
+    recentFundis: [],
+  });
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
+
+  const fetchDashboard = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:5001/api/auth/dashboard"
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setStats(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("adminId");
-
-    window.dispatchEvent(new Event("authChanged"));
-
+    localStorage.clear();
     navigate("/login");
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-xl">
+        Loading Dashboard...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
 
-      {/* Header */}
-      <div className="bg-red-600 text-white shadow">
-        <div className="max-w-7xl mx-auto flex justify-between items-center p-5">
-          <h1 className="text-2xl font-bold">
-            Fundi-Link Admin Dashboard
-          </h1>
+      <div className="bg-red-600 text-white p-5 flex justify-between">
+        <h1 className="text-2xl font-bold">
+          Fundi-Link Admin Dashboard
+        </h1>
 
-          <button
-            onClick={logout}
-            className="bg-white text-red-600 px-4 py-2 rounded font-semibold hover:bg-gray-100"
-          >
-            Logout
-          </button>
-        </div>
+        <button
+          onClick={logout}
+          className="bg-white text-red-600 px-4 py-2 rounded"
+        >
+          Logout
+        </button>
       </div>
 
-      <div className="max-w-7xl mx-auto p-8">
+      <div className="p-8">
 
-        <h2 className="text-3xl font-bold mb-8">
-          Welcome, Admin 👋
-        </h2>
+        <div className="grid md:grid-cols-4 gap-6 mb-10">
 
-        {/* Statistics */}
-        <div className="grid md:grid-cols-3 gap-6 mb-10">
-
-          <div className="bg-white rounded-xl shadow p-6">
+          <div className="bg-white p-6 rounded shadow">
             <h3 className="text-gray-500">Clients</h3>
-            <p className="text-4xl font-bold mt-2">0</p>
+            <p className="text-4xl font-bold">
+              {stats.clients}
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-6">
+          <div className="bg-white p-6 rounded shadow">
             <h3 className="text-gray-500">Fundis</h3>
-            <p className="text-4xl font-bold mt-2">0</p>
+            <p className="text-4xl font-bold">
+              {stats.fundis}
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="text-gray-500">Jobs Posted</h3>
-            <p className="text-4xl font-bold mt-2">0</p>
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-gray-500">Jobs</h3>
+            <p className="text-4xl font-bold">
+              {stats.jobs}
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-gray-500">Skills</h3>
+            <p className="text-4xl font-bold">
+              {stats.skills}
+            </p>
           </div>
 
         </div>
 
-        {/* Management Cards */}
+        <div className="grid md:grid-cols-2 gap-6 mb-10">
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="font-bold text-xl mb-3">
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-xl font-bold mb-3">
               Manage Clients
             </h3>
 
-            <p className="text-gray-600 mb-5">
-              View or remove registered clients.
-            </p>
-
             <button
               onClick={() => navigate("/admin/clients")}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="bg-blue-600 text-white px-4 py-2 rounded"
             >
               View Clients
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="font-bold text-xl mb-3">
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="text-xl font-bold mb-3">
               Manage Fundis
             </h3>
 
-            <p className="text-gray-600 mb-5">
-              View or remove fundis.
-            </p>
-
             <button
               onClick={() => navigate("/admin/fundis")}
-              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              className="bg-green-600 text-white px-4 py-2 rounded"
             >
               View Fundis
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="font-bold text-xl mb-3">
-              Manage Jobs
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="font-bold text-xl mb-4">
+              Recent Clients
             </h3>
 
-            <p className="text-gray-600 mb-5">
-              View jobs posted by clients.
-            </p>
-
-            <button
-              onClick={() => navigate("/admin/jobs")}
-              className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
-            >
-              View Jobs
-            </button>
+            {stats.recentClients.map(client => (
+              <div
+                key={client.id}
+                className="border-b py-2"
+              >
+                <p>{client.name}</p>
+                <p className="text-gray-500 text-sm">
+                  {client.email}
+                </p>
+              </div>
+            ))}
           </div>
 
-          <div className="bg-white rounded-xl shadow p-6">
-            <h3 className="font-bold text-xl mb-3">
-              Reports
+          <div className="bg-white p-6 rounded shadow">
+            <h3 className="font-bold text-xl mb-4">
+              Recent Fundis
             </h3>
 
-            <p className="text-gray-600 mb-5">
-              View simple platform statistics.
-            </p>
-
-            <button
-              onClick={() => navigate("/admin/reports")}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-            >
-              View Reports
-            </button>
+            {stats.recentFundis.map(fundi => (
+              <div
+                key={fundi.id}
+                className="border-b py-2"
+              >
+                <p>{fundi.name}</p>
+                <p className="text-gray-500 text-sm">
+                  {fundi.skill}
+                </p>
+              </div>
+            ))}
           </div>
 
         </div>
 
       </div>
-
     </div>
   );
 };

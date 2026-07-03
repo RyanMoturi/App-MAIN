@@ -7,8 +7,124 @@ require("dotenv").config();
 const router = express.Router();
 
 const jwtSecret = process.env.JWT_SECRET || "your_fallback_secret";
+const saltRounds = 10;
 
-// ================= LOGIN =================
+/* ===========================================================
+   CLIENT SIGNUP
+=========================================================== */
+router.post("/signup/client", async (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    phone_number,
+    location,
+  } = req.body;
+
+  try {
+    const [existing] = await db.query(
+      "SELECT * FROM clients WHERE email = ?",
+      [email]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        error: "Email already exists",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      saltRounds
+    );
+
+    await db.query(
+      `INSERT INTO clients
+      (name,email,location,password_hash,phone_number)
+      VALUES (?,?,?,?,?)`,
+      [
+        name,
+        email,
+        location,
+        hashedPassword,
+        phone_number,
+      ]
+    );
+
+    res.status(201).json({
+      message: "Client registered successfully",
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Server error during signup",
+    });
+  }
+});
+
+/* ===========================================================
+   FUNDI SIGNUP
+=========================================================== */
+router.post("/signup/fundi", async (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    skill,
+    bio,
+    location,
+  } = req.body;
+
+  try {
+    const [existing] = await db.query(
+      "SELECT * FROM fundis WHERE email = ?",
+      [email]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        error: "Email already exists",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      saltRounds
+    );
+
+    await db.query(
+      `INSERT INTO fundis
+      (name,email,skill,bio,location,password_hash,rating)
+      VALUES (?,?,?,?,?,?,?)`,
+      [
+        name,
+        email,
+        skill,
+        bio,
+        location,
+        hashedPassword,
+        0,
+      ]
+    );
+
+    res.status(201).json({
+      message: "Fundi registered successfully",
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Server error during signup",
+    });
+  }
+});
+
+/* ===========================================================
+   LOGIN
+=========================================================== */
 router.post("/login", async (req, res) => {
   const { email, password, role } = req.body;
 
@@ -26,7 +142,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      `SELECT * FROM ${table} WHERE email=?`,
+      `SELECT * FROM ${table} WHERE email = ?`,
       [email]
     );
 
@@ -82,6 +198,7 @@ router.post("/login", async (req, res) => {
       response.user.location = user.location;
       response.user.skill = user.skill;
       response.user.bio = user.bio;
+      response.user.rating = user.rating;
     }
 
     if (role === "admin") {
@@ -94,6 +211,7 @@ router.post("/login", async (req, res) => {
 
   } catch (err) {
     console.error(err);
+
     res.status(500).json({
       error: "Server error during login",
     });

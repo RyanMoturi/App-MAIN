@@ -103,13 +103,31 @@ const Signup = () => {
           )}
 
           {role === 'fundi' && (
-            <>
-              <input type="text" name="skills" placeholder="Skill (e.g. Plumbing)" value={formData.skills} onChange={handleChange}
-                className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" required />
-              <textarea name="bio" placeholder="Brief Bio" value={formData.bio} onChange={handleChange}
-                className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500" required />
-            </>
-          )}
+  <>
+    <select
+      name="skills"
+      value={formData.skills}
+      onChange={handleChange}
+      className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+      required
+    >
+      <option value="">Select Your Skill</option>
+      <option value="Plumbing">Plumbing</option>
+      <option value="Electrical">Electrical</option>
+      <option value="Carpentry">Carpentry</option>
+    </select>
+
+    <textarea
+      name="bio"
+      placeholder="Brief Bio"
+      value={formData.bio}
+      onChange={handleChange}
+      className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+      rows="4"
+      required
+    />
+  </>
+)}
 
           <button
             type="submit"

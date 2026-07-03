@@ -103,7 +103,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ================= Start Server =================
+// ================= Start Server ======npm start===========
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

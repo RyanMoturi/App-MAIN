@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import PostJob from "./PostJob";
 
 const TABS = [
@@ -10,50 +10,28 @@ const TABS = [
   "Profile",
 ];
 
-const mockMessages = [
-  {
-    id: 1,
-    from: "Jane Mwangi",
-    content: "I can start tomorrow!",
-    job: "Fix Sink",
-  },
-  {
-    id: 2,
-    from: "Mary Wanjiku",
-    content: "Do you have a color preference?",
-    job: "Paint Living Room",
-  },
-];
-
-const mockNotifications = [
-  {
-    id: 1,
-    content: "Jane Mwangi applied for your job: Fix Sink",
-  },
-  {
-    id: 2,
-    content: "Mary Wanjiku was accepted for your job: Paint Living Room",
-  },
-];
-
 const ClientDashboard = () => {
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [activeTab, setActiveTab] = useState("My Jobs");
 
+  // Jobs
   const [jobs, setJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [jobsError, setJobsError] = useState("");
-
   const [showPostJob, setShowPostJob] = useState(false);
 
+  // Fundis
   const [fundis, setFundis] = useState([]);
   const [loadingFundis, setLoadingFundis] = useState(false);
-
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [location, setLocation] = useState("");
 
-  const [messages] = useState(mockMessages);
-  const [notifications] = useState(mockNotifications);
+  // Messages
+  const [messages, setMessages] = useState([]);
+
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -62,8 +40,6 @@ const ClientDashboard = () => {
       navigate("/login");
     }
   }, [navigate]);
-
-  // ================= FETCH CLIENT JOBS =================
 
   const fetchJobs = async () => {
     setLoadingJobs(true);
@@ -79,44 +55,51 @@ const ClientDashboard = () => {
         },
       });
 
-      if (!res.ok) {
-        throw new Error();
-      }
+      if (!res.ok) throw new Error("Failed");
 
       const data = await res.json();
 
       setJobs(data);
     } catch (err) {
-      console.error(err);
       setJobsError("Failed to load jobs.");
+      console.log(err);
     }
 
     setLoadingJobs(false);
   };
 
-  // ================= FETCH FUNDIS =================
-
-  const fetchFundis = async (category = "All") => {
+  const fetchFundis = async (
+    category = "All",
+    searchLocation = ""
+  ) => {
     setLoadingFundis(true);
 
     try {
-      let endpoint = "/api/fundi";
+      let url = "/api/fundi";
+
+      const params = new URLSearchParams();
 
       if (category !== "All") {
-        endpoint = `/api/fundi/category/${category}`;
+        params.append("category", category);
       }
 
-      const res = await fetch(endpoint);
-
-      if (!res.ok) {
-        throw new Error();
+      if (searchLocation.trim() !== "") {
+        params.append("location", searchLocation);
       }
+
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+
+      const res = await fetch(url);
+
+      if (!res.ok) throw new Error("Failed");
 
       const data = await res.json();
 
       setFundis(data);
     } catch (err) {
-      console.error(err);
+      console.log(err);
     }
 
     setLoadingFundis(false);
@@ -128,7 +111,7 @@ const ClientDashboard = () => {
     }
 
     if (activeTab === "Find Fundis") {
-      fetchFundis(selectedCategory);
+      fetchFundis(selectedCategory, location);
     }
   }, [activeTab]);
 
@@ -139,7 +122,8 @@ const ClientDashboard = () => {
         Client Dashboard
       </h1>
 
-      <div className="flex gap-4 mb-8 flex-wrap">
+      <div className="flex gap-4 flex-wrap mb-8">
+
         {TABS.map((tab) => (
           <button
             key={tab}
@@ -153,14 +137,13 @@ const ClientDashboard = () => {
             {tab}
           </button>
         ))}
-      </div>
 
-      {/* ================= MY JOBS ================= */}
+      </div>
 
       {activeTab === "My Jobs" && (
         <div>
 
-          <div className="flex justify-between mb-6">
+          <div className="flex justify-between items-center mb-6">
 
             <h2 className="text-2xl font-semibold">
               My Jobs
@@ -174,7 +157,7 @@ const ClientDashboard = () => {
             >
               {showPostJob
                 ? "Cancel"
-                : "Post a Job"}
+                : "Post Job"}
             </button>
 
           </div>
@@ -190,137 +173,199 @@ const ClientDashboard = () => {
               {jobsError}
             </div>
           ) : jobs.length === 0 ? (
-            <div>No jobs posted yet.</div>
+            <div>No jobs posted.</div>
           ) : (
-            <ul className="space-y-4">
+            <div className="space-y-4">
+
               {jobs.map((job) => (
-                <li key={job.id}>
-                  <Link
-                    to={`/jobs/${job.id}`}
-                    className="block bg-white rounded shadow p-4 hover:ring-2 hover:ring-blue-500"
-                  >
 
-                    <div className="flex justify-between">
+                <Link
+                  key={job.id}
+                  to={`/jobs/${job.id}`}
+                  className="block bg-white rounded-lg shadow p-5 hover:shadow-lg"
+                >
 
-                      <div>
+                  <div className="flex justify-between">
 
-                        <h3 className="font-bold">
-                          {job.title}
-                        </h3>
+                    <div>
 
-                        {job.status && (
-                          <span className="text-gray-500 text-sm">
-                            {job.status}
-                          </span>
-                        )}
+                      <h3 className="text-xl font-bold">
+                        {job.title}
+                      </h3>
 
-                      </div>
+                      <p className="text-gray-600">
+                        {job.description}
+                      </p>
 
-                      <span className="text-blue-600">
-                        View →
-                      </span>
+                      <p className="text-blue-600 mt-2">
+                        Status:
+                        {" "}
+                        {job.status || "Open"}
+                      </p>
 
                     </div>
 
-                    {job.image_url && (
-                      <img
-                        src={job.image_url}
-                        alt={job.title}
-                        className="mt-3 rounded w-full h-48 object-cover"
-                      />
-                    )}
+                    <span className="text-blue-600">
+                      View →
+                    </span>
 
-                    <p className="mt-3 text-gray-600">
-                      {job.description}
-                    </p>
+                  </div>
 
-                  </Link>
-                </li>
+                  {job.image_url && (
+                    <img
+                      src={job.image_url}
+                      alt={job.title}
+                      className="mt-4 rounded w-full h-48 object-cover"
+                    />
+                  )}
+
+                </Link>
+
               ))}
-            </ul>
+
+            </div>
           )}
 
         </div>
       )}
-
-      {/* ================= FIND FUNDIS ================= */}
-
-      {activeTab === "Find Fundis" && (
+            {activeTab === "Find Fundis" && (
         <div>
 
           <h2 className="text-2xl font-semibold mb-6">
             Find Fundis
           </h2>
 
-          <select
-            value={selectedCategory}
-            onChange={(e) => {
-              setSelectedCategory(e.target.value);
-              fetchFundis(e.target.value);
-            }}
-            className="border rounded px-4 py-2 mb-6"
-          >
-            <option value="All">All Categories</option>
-            <option value="Plumbing">Plumbing</option>
-            <option value="Electrical">Electrical</option>
-            <option value="Carpentry">Carpentry</option>
-            <option value="Painting">Painting</option>
-            <option value="Cleaning">Cleaning</option>
-            <option value="Roofing">Roofing</option>
-            <option value="Welding">Welding</option>
-            <option value="Masonry">Masonry</option>
-          </select>
+          {/* Search Filters */}
+
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4">
+
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="border rounded px-4 py-2"
+            >
+              <option value="All">All Categories</option>
+              <option value="Plumbing">Plumbing</option>
+              <option value="Electrical">Electrical</option>
+              <option value="Carpentry">Carpentry</option>
+              <option value="Painting">Painting</option>
+              <option value="Cleaning">Cleaning</option>
+              <option value="Roofing">Roofing</option>
+              <option value="Welding">Welding</option>
+              <option value="Masonry">Masonry</option>
+            </select>
+
+            <input
+              type="text"
+              placeholder="Search by location..."
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="border rounded px-4 py-2 flex-1"
+            />
+
+            <button
+              onClick={() =>
+                fetchFundis(
+                  selectedCategory,
+                  location
+                )
+              }
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded"
+            >
+              Search
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedCategory("All");
+                setLocation("");
+                fetchFundis("All", "");
+              }}
+              className="bg-gray-300 hover:bg-gray-400 px-5 py-2 rounded"
+            >
+              Clear
+            </button>
+
+          </div>
 
           {loadingFundis ? (
-            <div>Loading fundis...</div>
+
+            <div className="text-center py-10">
+              Loading fundis...
+            </div>
+
           ) : fundis.length === 0 ? (
-            <div>No fundis found.</div>
+
+            <div className="text-center text-gray-500 py-10">
+              No fundis found.
+            </div>
+
           ) : (
-            <ul className="space-y-4">
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
 
               {fundis.map((fundi) => (
 
-                <li
+                <div
                   key={fundi.id}
-                  className="bg-white rounded shadow p-5 flex justify-between items-center"
+                  className="bg-white rounded-lg shadow hover:shadow-lg transition p-5"
                 >
 
-                  <div>
+                  <div className="flex justify-between items-start">
 
-                    <h3 className="font-bold text-lg">
-                      {fundi.name}
-                    </h3>
+                    <div>
 
-                    <p>{fundi.skill}</p>
+                      <h3 className="text-xl font-bold">
+                        {fundi.name}
+                      </h3>
 
-                    <p className="text-gray-500">
-                      {fundi.location}
-                    </p>
+                      <p className="text-blue-600 font-semibold">
+                        {fundi.skill}
+                      </p>
 
-                    <p className="text-yellow-500">
-                      ⭐ {fundi.rating}
-                    </p>
+                    </div>
 
-                    <p className="mt-2 text-gray-600">
-                      {fundi.bio}
-                    </p>
+                    <span className="text-yellow-500 font-semibold">
+                      ⭐ {fundi.rating || "0.0"}
+                    </span>
 
                   </div>
 
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded">
-                    View Profile
-                  </button>
+                  <p className="text-gray-500 mt-3">
+                    📍 {fundi.location}
+                  </p>
 
-                </li>
+                  <p className="text-gray-600 mt-3">
+                    {fundi.bio || "No bio available."}
+                  </p>
+
+                  <div className="flex gap-3 mt-6">
+
+                    <button
+                      className="flex-1 bg-black text-white py-2 rounded hover:bg-gray-800"
+                    >
+                      View Profile
+                    </button>
+
+                    <button
+                      className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                    >
+                      Hire
+                    </button>
+
+                  </div>
+
+                </div>
 
               ))}
 
-            </ul>
+            </div>
+
           )}
 
         </div>
       )}
-      {/* ================= MESSAGES ================= */}
+            {/* ===================== MESSAGES ===================== */}
 
       {activeTab === "Messages" && (
         <div>
@@ -329,37 +374,57 @@ const ClientDashboard = () => {
             Messages
           </h2>
 
-          <ul className="space-y-4">
+          {messages.length === 0 ? (
 
-            {messages.map((msg) => (
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+              No messages yet.
+            </div>
 
-              <li
-                key={msg.id}
-                className="bg-white rounded shadow p-5"
-              >
+          ) : (
 
-                <h3 className="font-bold">
-                  From: {msg.from}
-                </h3>
+            <div className="space-y-4">
 
-                <p className="mt-2">
-                  {msg.content}
-                </p>
+              {messages.map((message) => (
 
-                <p className="text-sm text-gray-500 mt-2">
-                  Regarding: {msg.job}
-                </p>
+                <div
+                  key={message.id}
+                  className="bg-white rounded-lg shadow p-5"
+                >
 
-              </li>
+                  <div className="flex justify-between items-center">
 
-            ))}
+                    <h3 className="font-bold text-lg">
+                      {message.from}
+                    </h3>
 
-          </ul>
+                    <span className="text-sm text-gray-500">
+                      {message.time}
+                    </span>
+
+                  </div>
+
+                  <p className="mt-3 text-gray-700">
+                    {message.content}
+                  </p>
+
+                  {message.job && (
+                    <p className="mt-2 text-sm text-blue-600">
+                      Job: {message.job}
+                    </p>
+                  )}
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
 
         </div>
       )}
 
-      {/* ================= NOTIFICATIONS ================= */}
+      {/* ===================== NOTIFICATIONS ===================== */}
 
       {activeTab === "Notifications" && (
         <div>
@@ -368,103 +433,139 @@ const ClientDashboard = () => {
             Notifications
           </h2>
 
-          <ul className="space-y-3">
+          {notifications.length === 0 ? (
 
-            {notifications.map((notification) => (
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+              No notifications.
+            </div>
 
-              <li
-                key={notification.id}
-                className="bg-white rounded shadow p-4"
-              >
-                {notification.content}
-              </li>
+          ) : (
 
-            ))}
+            <div className="space-y-4">
 
-          </ul>
+              {notifications.map((notification) => (
+
+                <div
+                  key={notification.id}
+                  className="bg-white rounded-lg shadow p-5 flex justify-between items-center"
+                >
+
+                  <div>
+
+                    <p className="font-medium">
+                      {notification.content}
+                    </p>
+
+                    {notification.created_at && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {notification.created_at}
+                      </p>
+                    )}
+
+                  </div>
+
+                  {!notification.read && (
+                    <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                      New
+                    </span>
+                  )}
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
 
         </div>
       )}
-
-      {/* ================= PROFILE ================= */}
+            {/* ===================== PROFILE ===================== */}
 
       {activeTab === "Profile" && (
-
         <div>
 
           <h2 className="text-2xl font-semibold mb-6">
             My Profile
           </h2>
 
-          <div className="bg-white rounded shadow p-6">
+          <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
 
             <div className="mb-5">
-
               <label className="block font-semibold mb-2">
                 Name
               </label>
 
               <input
-                className="border rounded w-full p-2"
+                type="text"
                 value={localStorage.getItem("name") || ""}
                 readOnly
+                className="w-full border rounded px-4 py-2 bg-gray-100"
               />
-
             </div>
 
             <div className="mb-5">
-
               <label className="block font-semibold mb-2">
                 Email
               </label>
 
               <input
-                className="border rounded w-full p-2"
+                type="email"
                 value={localStorage.getItem("email") || ""}
                 readOnly
+                className="w-full border rounded px-4 py-2 bg-gray-100"
               />
-
             </div>
 
             <div className="mb-5">
-
               <label className="block font-semibold mb-2">
                 Location
               </label>
 
               <input
-                className="border rounded w-full p-2"
+                type="text"
                 value={localStorage.getItem("location") || ""}
                 readOnly
+                className="w-full border rounded px-4 py-2 bg-gray-100"
               />
-
             </div>
 
             <div className="mb-5">
-
               <label className="block font-semibold mb-2">
                 Role
               </label>
 
               <input
-                className="border rounded w-full p-2"
+                type="text"
                 value="Client"
                 readOnly
+                className="w-full border rounded px-4 py-2 bg-gray-100"
               />
-
             </div>
 
-            <button
-              className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700"
-              disabled
-            >
-              Edit Profile (Coming Soon)
-            </button>
+            <div className="flex gap-3">
+
+              <button
+                className="bg-black text-white px-5 py-2 rounded hover:bg-gray-800"
+              >
+                Edit Profile
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  navigate("/login");
+                }}
+                className="bg-red-600 text-white px-5 py-2 rounded hover:bg-red-700"
+              >
+                Logout
+              </button>
+
+            </div>
 
           </div>
 
         </div>
-
       )}
 
     </div>

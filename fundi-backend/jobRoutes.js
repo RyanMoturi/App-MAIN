@@ -10,6 +10,44 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const jobSelect = `
+  SELECT
+    j.*,
+    CASE
+      WHEN assignment.completed_at IS NOT NULL THEN 'Completed'
+      WHEN accepted.id IS NOT NULL OR assignment.job_id IS NOT NULL THEN 'In Progress'
+      ELSE 'Open'
+    END AS status,
+    CASE
+      WHEN accepted.id IS NOT NULL OR assignment.job_id IS NOT NULL THEN 1
+      ELSE 0
+    END AS is_taken,
+    accepted.fundi_id AS accepted_fundi_id,
+    accepted.fundi_name AS accepted_fundi_name,
+    assignment.completed_at
+  FROM jobs j
+  LEFT JOIN (
+    SELECT a.job_id, a.fundi_id, f.name AS fundi_name, MIN(a.id) AS id
+    FROM applications a
+    JOIN fundis f ON f.id = a.fundi_id
+    WHERE a.status = 'Accepted'
+    GROUP BY a.job_id, a.fundi_id, f.name
+  ) accepted ON accepted.job_id = j.id
+  LEFT JOIN (
+    SELECT job_id, fundi_id, MAX(completed_at) AS completed_at
+    FROM job_assignments
+    GROUP BY job_id, fundi_id
+  ) assignment ON assignment.job_id = j.id
+`;
+
+const createNotification = async (userId, userRole, type, content) => {
+  await db.query(
+    `INSERT INTO notifications (user_id, user_role, type, content)
+     VALUES (?, ?, ?, ?)`,
+    [userId, userRole, type, content]
+  );
+};
+
 // POST /api/jobs (with image upload) - No JWT required
 router.post('/jobs', upload.single('image'), async (req, res) => {
   const { title, description, location, skillRequired, clientId } = req.body;
@@ -29,7 +67,7 @@ router.post('/jobs', upload.single('image'), async (req, res) => {
 // GET /api/jobs - Get all jobs (no JWT required)
 router.get('/jobs', async (req, res) => {
   try {
-    const [results] = await db.query('SELECT * FROM jobs');
+    const [results] = await db.query(`${jobSelect} ORDER BY j.created_at DESC`);
     res.json(results);
   } catch (err) {
     console.error('Error fetching jobs:', err);
@@ -41,7 +79,10 @@ router.get('/jobs', async (req, res) => {
 router.get('/client/:clientId/jobs', async (req, res) => {
   const { clientId } = req.params;
   try {
-    const [results] = await db.query('SELECT * FROM jobs WHERE client_id = ?', [clientId]);
+    const [results] = await db.query(
+      `${jobSelect} WHERE j.client_id = ? ORDER BY j.created_at DESC`,
+      [clientId]
+    );
     res.json(results);
   } catch (err) {
     console.error('Error fetching client jobs:', err);
@@ -53,7 +94,7 @@ router.get('/client/:clientId/jobs', async (req, res) => {
 router.get('/jobs/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const [results] = await db.query('SELECT * FROM jobs WHERE id = ?', [id]);
+    const [results] = await db.query(`${jobSelect} WHERE j.id = ?`, [id]);
     if (results.length === 0) return res.status(404).json({ error: 'Job not found' });
     res.json(results[0]);
   } catch (err) {
@@ -82,6 +123,58 @@ router.put('/jobs/:id', upload.single('image'), async (req, res) => {
   } catch (err) {
     console.error('Error updating job:', err);
     res.status(500).json({ error: 'Error updating job' });
+  }
+});
+
+// PUT /api/jobs/:id/complete - Client marks an assigned job as completed
+router.put('/jobs/:id/complete', async (req, res) => {
+  const { id } = req.params;
+  const { clientId } = req.body;
+
+  try {
+    const [[job]] = await db.query('SELECT * FROM jobs WHERE id = ?', [id]);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (String(job.client_id) !== String(clientId)) {
+      return res.status(403).json({ error: 'Not authorized to complete this job' });
+    }
+
+    const [[assignment]] = await db.query(
+      'SELECT * FROM job_assignments WHERE job_id = ? LIMIT 1',
+      [id]
+    );
+
+    if (!assignment) {
+      return res.status(400).json({ error: 'This job has not been assigned yet' });
+    }
+
+    if (!assignment.completed_at) {
+      await db.query(
+        'UPDATE job_assignments SET completed_at = NOW() WHERE id = ?',
+        [assignment.id]
+      );
+    }
+
+    await createNotification(
+      assignment.fundi_id,
+      'fundi',
+      'job_completed',
+      `"${job.title}" was marked as completed.`
+    );
+
+    await createNotification(
+      job.client_id,
+      'client',
+      'job_completed',
+      `You marked "${job.title}" as completed. Please rate the fundi.`
+    );
+
+    res.json({
+      message: 'Job marked as completed. Please rate the fundi.',
+      fundiId: assignment.fundi_id,
+    });
+  } catch (err) {
+    console.error('Error completing job:', err);
+    res.status(500).json({ error: 'Failed to complete job' });
   }
 });
 

@@ -32,6 +32,8 @@ const Login = () => {
       const data = await response.json();
 
       if (response.ok) {
+        localStorage.setItem("userId", data.user.id);
+
         // Store IDs depending on role
         if (formData.role === "client" && data.clientId) {
           localStorage.setItem("clientId", data.clientId);

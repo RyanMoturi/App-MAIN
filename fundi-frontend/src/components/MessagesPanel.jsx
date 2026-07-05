@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { io } from 'socket.io-client';
-
-const SOCKET_URL = 'http://localhost:5001';
 
 const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
-  const userId = localStorage.getItem('userId');
   const userRole = localStorage.getItem('role');
+  const userId =
+    localStorage.getItem('userId') ||
+    (userRole === 'client'
+      ? localStorage.getItem('clientId')
+      : localStorage.getItem('fundiId'));
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -13,7 +14,6 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState('');
-  const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   const fetchConversations = useCallback(async () => {
@@ -41,37 +41,6 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
-
-  useEffect(() => {
-    if (!userId || !userRole) return;
-
-    const socket = io(SOCKET_URL);
-    socket.emit('join', { userId, userRole });
-    socket.on('receive_message', (data) => {
-      setConversations((prev) => {
-        const key = `${data.job_id}-${data.sender_id === Number(userId) ? data.receiver_role : data.sender_role}-${data.sender_id === Number(userId) ? data.receiver_id : data.sender_id}`;
-        return prev;
-      });
-      fetchConversations();
-
-      if (
-        activeChat &&
-        String(data.job_id) === String(activeChat.job_id) &&
-        ((String(data.sender_id) === String(activeChat.other_user_id) &&
-          data.sender_role === activeChat.other_user_role) ||
-          (String(data.receiver_id) === String(activeChat.other_user_id) &&
-            data.receiver_role === activeChat.other_user_role))
-      ) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === data.id)) return prev;
-          return [...prev, data];
-        });
-      }
-    });
-
-    socketRef.current = socket;
-    return () => socket.disconnect();
-  }, [userId, userRole, activeChat, fetchConversations]);
 
   useEffect(() => {
     if (pendingChat && clientJobs.length > 0) {
@@ -102,6 +71,17 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
       fetchMessages(activeChat);
     }
   }, [activeChat, fetchMessages]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchConversations();
+      if (activeChat && !activeChat.isNew) {
+        fetchMessages(activeChat);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeChat, fetchConversations, fetchMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

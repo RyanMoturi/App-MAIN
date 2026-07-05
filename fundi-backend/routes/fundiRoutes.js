@@ -1,13 +1,37 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
+const multer = require("multer");
 const db = require("../db");
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
+
+const toDataUrl = (buffer) => {
+  if (!buffer) return null;
+  return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+};
 
 // ================= GET ALL FUNDIS =================
 router.get("/", async (req, res) => {
 
   try {
+    const { category, skill, location } = req.query;
+    const params = [];
+    let where = "WHERE 1=1";
+
+    if (category && category !== "All") {
+      where += " AND skill = ?";
+      params.push(category);
+    }
+
+    if (skill) {
+      where += " AND skill LIKE ?";
+      params.push(`%${skill}%`);
+    }
+
+    if (location) {
+      where += " AND location LIKE ?";
+      params.push(`%${location}%`);
+    }
 
     const [fundis] = await db.query(`
       SELECT
@@ -20,8 +44,9 @@ router.get("/", async (req, res) => {
         rating,
         created_at
       FROM fundis
+      ${where}
       ORDER BY rating DESC
-    `);
+    `, params);
 
     res.json(fundis);
 
@@ -116,6 +141,38 @@ router.get("/category/:skill", async (req, res) => {
 
 
 // ================= GET ONE FUNDI =================
+router.get("/:id/completed-jobs", async (req, res) => {
+  try {
+    const [jobs] = await db.query(
+      `SELECT
+        j.id,
+        j.title,
+        j.description,
+        j.location,
+        j.skill_required,
+        j.image_url,
+        j.created_at,
+        ja.assigned_at,
+        ja.completed_at,
+        r.rating,
+        r.comment
+       FROM job_assignments ja
+       JOIN jobs j ON j.id = ja.job_id
+       LEFT JOIN reviews r ON r.job_id = j.id AND r.fundi_id = ja.fundi_id
+       WHERE ja.fundi_id = ? AND ja.completed_at IS NOT NULL
+       ORDER BY ja.completed_at DESC`,
+      [req.params.id]
+    );
+
+    res.json(jobs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Failed to fetch completed jobs",
+    });
+  }
+});
+
 router.get("/:id", async (req, res) => {
 
   try {
@@ -128,7 +185,10 @@ router.get("/:id", async (req, res) => {
         skill,
         bio,
         location,
+        phone_number,
+        national_id,
         rating,
+        profile_photo,
         created_at
       FROM fundis
       WHERE id=?`,
@@ -141,7 +201,10 @@ router.get("/:id", async (req, res) => {
       });
     }
 
-    res.json(rows[0]);
+    res.json({
+      ...rows[0],
+      profile_photo: toDataUrl(rows[0].profile_photo),
+    });
 
   } catch (err) {
 
@@ -153,6 +216,49 @@ router.get("/:id", async (req, res) => {
 
   }
 
+});
+
+// ================= UPDATE ONE FUNDI =================
+router.put("/:id", upload.single("profile_photo"), async (req, res) => {
+  try {
+    const { name, email, location, skill, bio, phone_number } = req.body;
+
+    const [existing] = await db.query("SELECT id FROM fundis WHERE id = ?", [
+      req.params.id,
+    ]);
+
+    if (!existing.length) {
+      return res.status(404).json({
+        error: "Fundi not found",
+      });
+    }
+
+    if (req.file) {
+      await db.query(
+        `UPDATE fundis
+         SET name = ?, email = ?, location = ?, skill = ?, bio = ?, phone_number = ?, profile_photo = ?
+         WHERE id = ?`,
+        [name, email, location, skill, bio, phone_number, req.file.buffer, req.params.id]
+      );
+    } else {
+      await db.query(
+        `UPDATE fundis
+         SET name = ?, email = ?, location = ?, skill = ?, bio = ?, phone_number = ?
+         WHERE id = ?`,
+        [name, email, location, skill, bio, phone_number, req.params.id]
+      );
+    }
+
+    res.json({
+      message: "Profile updated successfully",
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Failed to update profile",
+    });
+  }
 });
 
 module.exports = router;

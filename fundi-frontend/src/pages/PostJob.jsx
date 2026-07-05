@@ -53,6 +53,7 @@ const PostJob = ({ onSubmit }) => {
     if (response.ok) {
       setSuccessMessage('✅ Job posted successfully!');
       setFormVisible(false);
+      onSubmit?.();
       setFormData({
         title: '',
         description: '',

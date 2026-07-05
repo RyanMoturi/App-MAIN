@@ -11,7 +11,7 @@ const FundiProfile = ({ fundiId, onClose, onMessage }) => {
       setLoading(true);
       try {
         const [fundiRes, reviewsRes] = await Promise.all([
-          fetch(`/api/fundis/${fundiId}`),
+          fetch(`/api/fundi/${fundiId}`),
           fetch(`/api/fundi/${fundiId}/reviews`),
         ]);
         if (fundiRes.ok) setFundi(await fundiRes.json());

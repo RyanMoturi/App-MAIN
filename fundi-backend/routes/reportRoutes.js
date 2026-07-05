@@ -21,7 +21,7 @@ router.get("/", async (req, res) => {
     );
 
     const [[applications]] = await db.query(
-      "SELECT COUNT(*) AS total FROM job_applications"
+      "SELECT COUNT(*) AS total FROM applications"
     );
 
     const [[reviews]] = await db.query(

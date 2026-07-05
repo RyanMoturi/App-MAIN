@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { formatTimeAgo } from "../utils/timeAgo";
+import MessagesPanel from "../components/MessagesPanel";
 
 
 const TABS = [
   "Find Jobs",
   "My Applications",
   "Active Jobs",
+  "Completed Jobs",
   "Messages",
   "Notifications",
   "Profile",
@@ -23,9 +26,12 @@ const FundiDashboard = () => {
 
   const [applications, setApplications] = useState([]);
   const [activeJobs, setActiveJobs] = useState([]);
-  const [messages, setMessages] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [portfolio, setPortfolio] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
+  const [applyingJobId, setApplyingJobId] = useState(null);
+  const [editingProfile, setEditingProfile] = useState(false);
 
   const [profile, setProfile] = useState({
     name: "",
@@ -34,6 +40,7 @@ const FundiDashboard = () => {
     skill: "",
     bio: "",
     national_id: "",
+    phone_number: "",
     rating: 5,
     profile_photo: "",
   });
@@ -60,13 +67,25 @@ const FundiDashboard = () => {
     if (activeTab === "My Applications") {
       fetchApplications();
     }
+
+    if (activeTab === "Active Jobs") {
+      fetchApplications();
+    }
+
+    if (activeTab === "Completed Jobs") {
+      fetchCompletedJobs();
+    }
+
+    if (activeTab === "Notifications") {
+      fetchNotifications();
+    }
   }, [activeTab]);
 
   const fetchProfile = async () => {
     try {
       const fundiId = localStorage.getItem("fundiId");
 
-      const res = await fetch(`/api/fundis/${fundiId}`);
+      const res = await fetch(`/api/fundi/${fundiId}`);
 
       const data = await res.json();
 
@@ -119,10 +138,69 @@ const FundiDashboard = () => {
 
       const data = await res.json();
 
-      setApplications(data);
+      const applicationList = Array.isArray(data) ? data : [];
+
+      setApplications(applicationList);
+      setActiveJobs(
+        applicationList.filter(
+          (application) =>
+            application.status === "Accepted" &&
+            application.job_status !== "Completed"
+        )
+      );
     } catch (err) {
       console.log(err);
     }
+  };
+
+  const fetchCompletedJobs = async () => {
+    try {
+      const fundiId = localStorage.getItem("fundiId");
+      const res = await fetch(`/api/fundi/${fundiId}/completed-jobs`);
+
+      if (res.ok) {
+        setCompletedJobs(await res.json());
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    const fundiId = localStorage.getItem("fundiId");
+    if (!fundiId) return;
+
+    setLoadingNotifications(true);
+
+    try {
+      const res = await fetch(
+        `/api/notifications?userId=${fundiId}&userRole=fundi`
+      );
+
+      if (res.ok) {
+        setNotifications(await res.json());
+      }
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const markNotificationRead = async (notificationId) => {
+    const fundiId = localStorage.getItem("fundiId");
+
+    await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notificationId,
+        userId: fundiId,
+        userRole: "fundi",
+      }),
+    });
+
+    fetchNotifications();
   };
 
   const saveProfile = async () => {
@@ -138,12 +216,13 @@ const FundiDashboard = () => {
       formData.append("location", profile.location);
       formData.append("skill", profile.skill);
       formData.append("bio", profile.bio);
+      formData.append("phone_number", profile.phone_number || "");
 
       if (newPhoto) {
         formData.append("profile_photo", newPhoto);
       }
 
-      const res = await fetch(`/api/fundis/${fundiId}`, {
+      const res = await fetch(`/api/fundi/${fundiId}`, {
         method: "PUT",
         body: formData,
       });
@@ -153,6 +232,8 @@ const FundiDashboard = () => {
       alert(data.message);
 
       fetchProfile();
+      setEditingProfile(false);
+      setNewPhoto(null);
 
       setSavingProfile(false);
 
@@ -203,7 +284,10 @@ const FundiDashboard = () => {
           </div>
         ) : (
           <ul className="space-y-4">
-            {jobs.map((job) => (
+            {jobs.map((job) => {
+              const isTaken = job.status && job.status !== "Open";
+
+              return (
               <li
                 key={job.id}
                 className="bg-white rounded shadow p-4 flex flex-col md:flex-row justify-between gap-4"
@@ -226,6 +310,10 @@ const FundiDashboard = () => {
                     {job.location}
                   </p>
 
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatTimeAgo(job.created_at)}
+                  </p>
+
                   <p className="text-gray-700 mt-2">
                     {job.description}
                   </p>
@@ -234,42 +322,67 @@ const FundiDashboard = () => {
                     Skill Required: {job.skill_required}
                   </p>
 
+                  <p
+                    className={`mt-2 text-sm font-semibold ${
+                      isTaken ? "text-red-600" : "text-green-600"
+                    }`}
+                  >
+                    Status: {job.status || "Open"}
+                  </p>
+
                 </div>
 
                 <button
-                  className="bg-green-600 text-white px-4 py-2 rounded h-fit"
+                  disabled={isTaken || applyingJobId === job.id}
+                  className={`px-4 py-2 rounded h-fit ${
+                    isTaken
+                      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  } disabled:opacity-70`}
                   onClick={async () => {
 
                     const fundiId =
                       localStorage.getItem("fundiId");
 
-                    const res = await fetch(
-                      "/api/applications/apply",
-                      {
-                        method: "POST",
-                        headers: {
-                          "Content-Type":
-                            "application/json",
-                        },
-                        body: JSON.stringify({
-                          jobId: job.id,
-                          fundiId,
-                          message: "",
-                        }),
-                      }
-                    );
+                    setApplyingJobId(job.id);
 
-                    const data = await res.json();
+                    try {
+                      const res = await fetch(
+                        "/api/applications/apply",
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type":
+                              "application/json",
+                          },
+                          body: JSON.stringify({
+                            jobId: job.id,
+                            fundiId,
+                            message: "",
+                          }),
+                        }
+                      );
 
-                    alert(data.message);
+                      const data = await res.json();
 
-                    fetchApplications();
+                      alert(data.message);
+
+                      fetchApplications();
+                      fetchJobs();
+                    } finally {
+                      setApplyingJobId(null);
+                    }
                   }}
                 >
-                  Apply
+                  {isTaken
+                    ? "Unavailable"
+                    : applyingJobId === job.id
+                      ? "Applying..."
+                      : "Apply"}
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
@@ -311,6 +424,10 @@ const FundiDashboard = () => {
                     {app.location}
                   </p>
 
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatTimeAgo(app.job_created_at)}
+                  </p>
+
                   <p className="text-blue-600 mt-2">
                     Status: {app.status}
                   </p>
@@ -323,7 +440,7 @@ const FundiDashboard = () => {
 
                 </div>
 
-                {app.status === "pending" && (
+                {app.status === "Pending" && (
                   <button
                     className="bg-red-600 text-white px-3 py-2 rounded"
                     onClick={async () => {
@@ -372,7 +489,10 @@ const FundiDashboard = () => {
               <h3 className="font-bold">{job.title}</h3>
               <p className="text-gray-600">{job.location}</p>
               <p className="text-sm text-green-600 mt-1">
-                Status: {job.status}
+                Status: Active
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formatTimeAgo(job.job_created_at)}
               </p>
             </div>
 
@@ -385,30 +505,42 @@ const FundiDashboard = () => {
     )}
   </div>
 )}
-{activeTab === "Messages" && (
+{activeTab === "Completed Jobs" && (
   <div>
-    <h2 className="text-xl font-semibold mb-4">Messages</h2>
+    <h2 className="text-xl font-semibold mb-4">Completed Jobs</h2>
 
-    {messages.length === 0 ? (
+    {completedJobs.length === 0 ? (
       <div className="bg-white p-6 rounded shadow text-center text-gray-500">
-        No messages yet.
+        No completed jobs yet.
       </div>
     ) : (
-      <ul className="space-y-3">
-        {messages.map((msg) => (
-          <li
-            key={msg.id}
-            className="bg-white p-4 rounded shadow"
-          >
-            <p className="font-semibold">{msg.sender}</p>
-            <p className="text-gray-600">{msg.text}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {msg.created_at}
+      <ul className="space-y-4">
+        {completedJobs.map((job) => (
+          <li key={job.id} className="bg-white p-4 rounded shadow">
+            <h3 className="font-bold">{job.title}</h3>
+            <p className="text-gray-600">{job.location}</p>
+            <p className="text-sm text-green-600 mt-1">
+              Completed {formatTimeAgo(job.completed_at).replace("Posted ", "")}
             </p>
+            {job.rating && (
+              <p className="text-sm text-yellow-600 mt-1">
+                Rating: {job.rating}/5
+              </p>
+            )}
+            {job.comment && (
+              <p className="text-sm text-gray-700 mt-1">{job.comment}</p>
+            )}
           </li>
         ))}
       </ul>
     )}
+  </div>
+)}
+{activeTab === "Messages" && (
+  <div>
+    <h2 className="text-xl font-semibold mb-4">Messages</h2>
+
+    <MessagesPanel />
   </div>
 )}
 {activeTab === "Notifications" && (
@@ -417,7 +549,11 @@ const FundiDashboard = () => {
       Notifications
     </h2>
 
-    {notifications.length === 0 ? (
+    {loadingNotifications ? (
+      <div className="bg-white p-6 rounded shadow text-center text-gray-500">
+        Loading notifications...
+      </div>
+    ) : notifications.length === 0 ? (
       <div className="bg-white p-6 rounded shadow text-center text-gray-500">
         No notifications.
       </div>
@@ -428,10 +564,23 @@ const FundiDashboard = () => {
             key={note.id}
             className="bg-white p-4 rounded shadow"
           >
-            <p>{note.message}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {note.created_at}
-            </p>
+            <div className="flex justify-between gap-4">
+              <div>
+                <p>{note.content}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {note.created_at}
+                </p>
+              </div>
+
+              {!note.is_read && (
+                <button
+                  onClick={() => markNotificationRead(note.id)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Mark read
+                </button>
+              )}
+            </div>
           </li>
         ))}
       </ul>
@@ -476,51 +625,86 @@ const FundiDashboard = () => {
       <div className="md:w-2/3 space-y-3">
 
         <input
-          className="w-full border p-2 rounded"
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
           placeholder="Name"
           value={profile.name}
+          readOnly={!editingProfile}
           onChange={(e) =>
             setProfile({ ...profile, name: e.target.value })
           }
         />
 
         <input
-          className="w-full border p-2 rounded"
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
           placeholder="Email"
           value={profile.email}
+          readOnly={!editingProfile}
           onChange={(e) =>
             setProfile({ ...profile, email: e.target.value })
           }
         />
 
         <input
-          className="w-full border p-2 rounded"
+          className="w-full border p-2 rounded bg-gray-100"
+          placeholder="National ID"
+          value={profile.national_id || ""}
+          readOnly
+        />
+
+        <input
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+          placeholder="Phone Number"
+          value={profile.phone_number || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, phone_number: e.target.value })
+          }
+        />
+
+        <input
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
           placeholder="Location"
           value={profile.location}
+          readOnly={!editingProfile}
           onChange={(e) =>
             setProfile({ ...profile, location: e.target.value })
           }
         />
 
         <input
-          className="w-full border p-2 rounded"
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
           placeholder="Skill"
           value={profile.skill}
+          readOnly={!editingProfile}
           onChange={(e) =>
             setProfile({ ...profile, skill: e.target.value })
           }
         />
 
         <textarea
-          className="w-full border p-2 rounded"
+          className={`w-full border p-2 rounded ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
           placeholder="Bio"
           value={profile.bio}
+          readOnly={!editingProfile}
           onChange={(e) =>
             setProfile({ ...profile, bio: e.target.value })
           }
         />
 
         {/* Upload new photo */}
+        {editingProfile && (
         <div>
           <label className="block text-sm text-gray-600 mb-1">
             Profile Photo
@@ -533,14 +717,37 @@ const FundiDashboard = () => {
             className="w-full"
           />
         </div>
+        )}
 
-        <button
-          onClick={saveProfile}
-          disabled={savingProfile}
-          className="bg-black text-white px-4 py-2 rounded w-full"
-        >
-          {savingProfile ? "Saving..." : "Save Profile"}
-        </button>
+        {editingProfile ? (
+          <div className="flex gap-3">
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile}
+              className="bg-green-600 text-white px-4 py-2 rounded flex-1 disabled:opacity-50"
+            >
+              {savingProfile ? "Saving..." : "Save Profile"}
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingProfile(false);
+                setNewPhoto(null);
+                fetchProfile();
+              }}
+              className="bg-gray-300 px-4 py-2 rounded flex-1"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditingProfile(true)}
+            className="bg-black text-white px-4 py-2 rounded w-full"
+          >
+            Edit Profile
+          </button>
+        )}
       </div>
     </div>
   </div>

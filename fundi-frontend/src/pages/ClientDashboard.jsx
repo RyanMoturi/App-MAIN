@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PostJob from "./PostJob";
+import { formatTimeAgo } from "../utils/timeAgo";
+import MessagesPanel from "../components/MessagesPanel";
 
 const TABS = [
   "My Jobs",
@@ -27,11 +29,21 @@ const ClientDashboard = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [location, setLocation] = useState("");
 
-  // Messages
-  const [messages, setMessages] = useState([]);
-
   // Notifications
   const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Profile
+  const [clientProfile, setClientProfile] = useState({
+    name: "",
+    email: "",
+    phone_number: "",
+    location: "",
+    profile_photo: "",
+  });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [newProfilePhoto, setNewProfilePhoto] = useState(null);
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -105,6 +117,102 @@ const ClientDashboard = () => {
     setLoadingFundis(false);
   };
 
+  const fetchNotifications = async () => {
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId) return;
+
+    setLoadingNotifications(true);
+
+    try {
+      const res = await fetch(
+        `/api/notifications?userId=${clientId}&userRole=client`
+      );
+      if (res.ok) {
+        setNotifications(await res.json());
+      }
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const markNotificationRead = async (notificationId) => {
+    const clientId = localStorage.getItem("clientId");
+
+    await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notificationId,
+        userId: clientId,
+        userRole: "client",
+      }),
+    });
+
+    fetchNotifications();
+  };
+
+  const fetchClientProfile = async () => {
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId) return;
+
+    try {
+      const res = await fetch(`/api/client/${clientId}/profile`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientProfile({
+          name: data.name || "",
+          email: data.email || "",
+          phone_number: data.phone_number || "",
+          location: data.location || "",
+          profile_photo: data.profile_photo || "",
+        });
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const saveClientProfile = async () => {
+    const clientId = localStorage.getItem("clientId");
+    const formData = new FormData();
+
+    formData.append("name", clientProfile.name);
+    formData.append("email", clientProfile.email);
+    formData.append("phone_number", clientProfile.phone_number || "");
+    formData.append("location", clientProfile.location || "");
+
+    if (newProfilePhoto) {
+      formData.append("profile_photo", newProfilePhoto);
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const res = await fetch(`/api/client/${clientId}/profile`, {
+        method: "PUT",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Failed to save profile");
+
+      localStorage.setItem("name", clientProfile.name);
+      localStorage.setItem("email", clientProfile.email);
+      localStorage.setItem("location", clientProfile.location);
+
+      alert(data.message);
+      setEditingProfile(false);
+      setNewProfilePhoto(null);
+      fetchClientProfile();
+    } catch (err) {
+      alert(err.message || "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "My Jobs") {
       fetchJobs();
@@ -112,6 +220,14 @@ const ClientDashboard = () => {
 
     if (activeTab === "Find Fundis") {
       fetchFundis(selectedCategory, location);
+    }
+
+    if (activeTab === "Notifications") {
+      fetchNotifications();
+    }
+
+    if (activeTab === "Profile") {
+      fetchClientProfile();
     }
   }, [activeTab]);
 
@@ -197,7 +313,15 @@ const ClientDashboard = () => {
                         {job.description}
                       </p>
 
-                      <p className="text-blue-600 mt-2">
+                      <p className="text-sm text-gray-500 mt-2">
+                        {formatTimeAgo(job.created_at)}
+                      </p>
+
+                      <p
+                        className={`font-semibold mt-2 ${
+                          job.is_taken ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
                         Status:
                         {" "}
                         {job.status || "Open"}
@@ -374,52 +498,7 @@ const ClientDashboard = () => {
             Messages
           </h2>
 
-          {messages.length === 0 ? (
-
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-              No messages yet.
-            </div>
-
-          ) : (
-
-            <div className="space-y-4">
-
-              {messages.map((message) => (
-
-                <div
-                  key={message.id}
-                  className="bg-white rounded-lg shadow p-5"
-                >
-
-                  <div className="flex justify-between items-center">
-
-                    <h3 className="font-bold text-lg">
-                      {message.from}
-                    </h3>
-
-                    <span className="text-sm text-gray-500">
-                      {message.time}
-                    </span>
-
-                  </div>
-
-                  <p className="mt-3 text-gray-700">
-                    {message.content}
-                  </p>
-
-                  {message.job && (
-                    <p className="mt-2 text-sm text-blue-600">
-                      Job: {message.job}
-                    </p>
-                  )}
-
-                </div>
-
-              ))}
-
-            </div>
-
-          )}
+          <MessagesPanel clientJobs={jobs} />
 
         </div>
       )}
@@ -433,7 +512,11 @@ const ClientDashboard = () => {
             Notifications
           </h2>
 
-          {notifications.length === 0 ? (
+          {loadingNotifications ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+              Loading notifications...
+            </div>
+          ) : notifications.length === 0 ? (
 
             <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
               No notifications.
@@ -464,11 +547,22 @@ const ClientDashboard = () => {
 
                   </div>
 
-                  {!notification.read && (
-                    <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                      New
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {!notification.is_read && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        New
+                      </span>
+                    )}
+
+                    {!notification.is_read && (
+                      <button
+                        onClick={() => markNotificationRead(notification.id)}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </div>
 
                 </div>
 
@@ -491,6 +585,30 @@ const ClientDashboard = () => {
 
           <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
 
+            <div className="mb-5 flex items-center gap-4">
+              <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200">
+                {newProfilePhoto || clientProfile.profile_photo ? (
+                  <img
+                    src={
+                      newProfilePhoto
+                        ? URL.createObjectURL(newProfilePhoto)
+                        : clientProfile.profile_photo
+                    }
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : null}
+              </div>
+
+              {editingProfile && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewProfilePhoto(e.target.files[0])}
+                />
+              )}
+            </div>
+
             <div className="mb-5">
               <label className="block font-semibold mb-2">
                 Name
@@ -498,9 +616,14 @@ const ClientDashboard = () => {
 
               <input
                 type="text"
-                value={localStorage.getItem("name") || ""}
-                readOnly
-                className="w-full border rounded px-4 py-2 bg-gray-100"
+                value={clientProfile.name}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({ ...clientProfile, name: e.target.value })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
               />
             </div>
 
@@ -511,9 +634,35 @@ const ClientDashboard = () => {
 
               <input
                 type="email"
-                value={localStorage.getItem("email") || ""}
-                readOnly
-                className="w-full border rounded px-4 py-2 bg-gray-100"
+                value={clientProfile.email}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({ ...clientProfile, email: e.target.value })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Phone Number
+              </label>
+
+              <input
+                type="text"
+                value={clientProfile.phone_number}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({
+                    ...clientProfile,
+                    phone_number: e.target.value,
+                  })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
               />
             </div>
 
@@ -524,9 +673,17 @@ const ClientDashboard = () => {
 
               <input
                 type="text"
-                value={localStorage.getItem("location") || ""}
-                readOnly
-                className="w-full border rounded px-4 py-2 bg-gray-100"
+                value={clientProfile.location}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({
+                    ...clientProfile,
+                    location: e.target.value,
+                  })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
               />
             </div>
 
@@ -545,11 +702,35 @@ const ClientDashboard = () => {
 
             <div className="flex gap-3">
 
-              <button
-                className="bg-black text-white px-5 py-2 rounded hover:bg-gray-800"
-              >
-                Edit Profile
-              </button>
+              {editingProfile ? (
+                <>
+                  <button
+                    onClick={saveClientProfile}
+                    disabled={savingProfile}
+                    className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditingProfile(false);
+                      setNewProfilePhoto(null);
+                      fetchClientProfile();
+                    }}
+                    className="bg-gray-300 px-5 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditingProfile(true)}
+                  className="bg-black text-white px-5 py-2 rounded hover:bg-gray-800"
+                >
+                  Edit Profile
+                </button>
+              )}
 
               <button
                 onClick={() => {

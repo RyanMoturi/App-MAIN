@@ -14,7 +14,7 @@ const fundiRoutes = require("./routes/fundiRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const portfolioRoutes = require("./portfolioRoutes");
-
+const applicationRoutes = require("./routes/applicationRoutes");
 const app = express();
 
 const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key";
@@ -22,6 +22,7 @@ const PORT = process.env.PORT || 5001;
 
 app.use(express.json());
 app.use(cors());
+
 
 // ================= JWT Middleware =================
 const authenticateJWT = (req, res, next) => {
@@ -64,6 +65,8 @@ app.use("/api/client", clientRoutes);
 app.use("/api/fundi", fundiRoutes);
 
 app.use("/api/admin", adminRoutes);
+
+app.use("/api/applications", applicationRoutes);
 
 app.use("/api/reports", reportRoutes);
 

@@ -1,141 +1,292 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Signup = () => {
   const navigate = useNavigate();
-  const [role, setRole] = useState('client');
+
+  const [role, setRole] = useState("client");
+
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone_number: '',
-    password: '',
-    skills: '',
-    bio: '',
-    location: ''
+    name: "",
+    email: "",
+    password: "",
+    location: "",
+    phone_number: "",
+
+    skill: "",
+    bio: "",
+
+    national_id: "",
+    id_photo: null,
+    profile_photo: null,
   });
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, files } = e.target;
+
+    if (files) {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: files[0],
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const endpoint =
-      role === 'fundi'
-        ? 'http://localhost:5001/api/auth/signup/fundi'
-        : 'http://localhost:5001/api/auth/signup/client';
-
-    const payload =
-      role === 'fundi'
-        ? {
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            skill: formData.skills,
-            bio: formData.bio,
-            location: formData.location
-          }
-        : {
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            location: formData.location,
-            phone_number: formData.phone_number
-          };
-
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let response;
 
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Signup successful!');
-        navigate('/login');
-      } else {
-        alert(`Signup failed: ${data.error}`);
+      // ================= CLIENT SIGNUP =================
+      if (role === "client") {
+        response = await fetch(
+          "http://localhost:5001/api/auth/signup/client",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: formData.name,
+              email: formData.email,
+              password: formData.password,
+              phone_number: formData.phone_number,
+              location: formData.location,
+            }),
+          }
+        );
       }
-    } catch (error) {
-      console.error('Signup error:', error);
-      alert('Something went wrong.');
+
+      // ================= FUNDI SIGNUP =================
+      else {
+        if (formData.national_id.length < 6) {
+          alert("National ID must contain at least 6 digits.");
+          return;
+        }
+
+        const data = new FormData();
+
+        data.append("name", formData.name);
+        data.append("email", formData.email);
+        data.append("password", formData.password);
+        data.append("location", formData.location);
+        data.append("skill", formData.skill);
+        data.append("bio", formData.bio);
+        data.append("national_id", formData.national_id);
+
+        data.append("id_photo", formData.id_photo);
+        data.append("profile_photo", formData.profile_photo);
+
+        response = await fetch(
+          "http://localhost:5001/api/auth/signup/fundi",
+          {
+            method: "POST",
+            body: data,
+          }
+        );
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        alert(result.error || "Signup failed.");
+        return;
+      }
+
+      alert(result.message);
+      navigate("/login");
+
+    } catch (err) {
+      console.error(err);
+      alert("Server error.");
     }
   };
-
-  return (
+    return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-md">
-        <h2 className="text-2xl font-bold text-center mb-6">Create an Account</h2>
 
-        <div className="flex justify-center gap-4 mb-4">
+        <h2 className="text-2xl font-bold text-center mb-6">
+          Create an Account
+        </h2>
+
+        <div className="flex justify-center gap-4 mb-6">
+
           <button
             type="button"
-            onClick={() => setRole('client')}
-            className={`px-4 py-2 rounded-full border ${role === 'client' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+            onClick={() => setRole("client")}
+            className={`px-4 py-2 rounded-full border ${
+              role === "client"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200"
+            }`}
           >
             Client
           </button>
+
           <button
             type="button"
-            onClick={() => setRole('fundi')}
-            className={`px-4 py-2 rounded-full border ${role === 'fundi' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+            onClick={() => setRole("fundi")}
+            className={`px-4 py-2 rounded-full border ${
+              role === "fundi"
+                ? "bg-green-600 text-white"
+                : "bg-gray-200"
+            }`}
           >
             Fundi
           </button>
+
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input type="text" name="name" placeholder="Full Name" value={formData.name} onChange={handleChange}
-            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange}
-            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          <input type="text" name="location" placeholder="Location" value={formData.location} onChange={handleChange}
-            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-          <input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleChange}
-            className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
 
-          {role === 'client' && (
-            <input type="text" name="phone_number" placeholder="Phone Number" value={formData.phone_number} onChange={handleChange}
-              className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+          <input
+            type="text"
+            name="name"
+            placeholder="Full Name"
+            value={formData.name}
+            onChange={handleChange}
+            className="w-full p-3 border rounded"
+            required
+          />
+
+          <input
+            type="email"
+            name="email"
+            placeholder="Email Address"
+            value={formData.email}
+            onChange={handleChange}
+            className="w-full p-3 border rounded"
+            required
+          />
+
+          <input
+            type="text"
+            name="location"
+            placeholder="Location"
+            value={formData.location}
+            onChange={handleChange}
+            className="w-full p-3 border rounded"
+            required
+          />
+
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+            className="w-full p-3 border rounded"
+            required
+          />
+
+          {role === "client" && (
+            <input
+              type="text"
+              name="phone_number"
+              placeholder="Phone Number"
+              value={formData.phone_number}
+              onChange={handleChange}
+              className="w-full p-3 border rounded"
+              required
+            />
           )}
 
-          {role === 'fundi' && (
-  <>
-    <select
-      name="skills"
-      value={formData.skills}
-      onChange={handleChange}
-      className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-      required
-    >
-      <option value="">Select Your Skill</option>
-      <option value="Plumbing">Plumbing</option>
-      <option value="Electrical">Electrical</option>
-      <option value="Carpentry">Carpentry</option>
-    </select>
+          {role === "fundi" && (
+            <>
+              <select
+                name="skill"
+                value={formData.skill}
+                onChange={handleChange}
+                className="w-full p-3 border rounded"
+                required
+              >
+                <option value="">Select Your Skill</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Carpentry">Carpentry</option>
+              </select>
 
-    <textarea
-      name="bio"
-      placeholder="Brief Bio"
-      value={formData.bio}
-      onChange={handleChange}
-      className="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-      rows="4"
-      required
-    />
-  </>
-)}
+              <input
+                type="number"
+                name="national_id"
+                placeholder="National ID Number"
+                value={formData.national_id}
+                onChange={handleChange}
+                className="w-full p-3 border rounded"
+                min="100000"
+                required
+              />
 
-          <button
+              <div>
+                <label className="block mb-2 font-medium">
+                  Upload National ID Photo
+                </label>
+
+                <input
+                  type="file"
+                  name="id_photo"
+                  accept="image/*"
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-2 font-medium">
+                  Upload Recent Photo
+                </label>
+
+                <input
+                  type="file"
+                  name="profile_photo"
+                  accept="image/*"
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                  required
+                />
+              </div>
+
+              <textarea
+                name="bio"
+                placeholder="Tell clients about yourself..."
+                value={formData.bio}
+                onChange={handleChange}
+                rows="4"
+                className="w-full p-3 border rounded"
+                required
+              />
+            </>
+          )}
+                    <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded"
+            className={`w-full text-white font-semibold py-3 rounded ${
+              role === "client"
+                ? "bg-blue-600 hover:bg-blue-700"
+                : "bg-green-600 hover:bg-green-700"
+            }`}
           >
             Sign Up as {role.charAt(0).toUpperCase() + role.slice(1)}
           </button>
+
         </form>
+
+        <p className="text-center mt-6 text-gray-600">
+          Already have an account?{" "}
+          <button
+            onClick={() => navigate("/login")}
+            className="text-blue-600 hover:underline font-semibold"
+          >
+            Login
+          </button>
+        </p>
+
       </div>
     </div>
   );

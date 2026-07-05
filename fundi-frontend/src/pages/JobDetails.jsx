@@ -5,6 +5,7 @@ const JobDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
+  const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -47,6 +48,12 @@ const JobDetails = () => {
       }
     };
     fetchJob();
+    const fetchApplications = async () => {
+      const appRes = await fetch(`/api/applications/job/${id}`);
+      const appData = await appRes.json();
+      setApplications(appData);
+    };
+    fetchApplications();
   }, [id]);
 
   const handleChange = (e) => {
@@ -231,6 +238,32 @@ const JobDetails = () => {
           )}
         </div>
       )}
+      <h2 className="text-2xl font-bold mt-8 mb-4">
+    Applicants
+</h2>
+
+{applications.length === 0 ? (
+    <p>No applications yet.</p>
+) : (
+    applications.map((app) => (
+        <div
+            key={app.id}
+            className="bg-white shadow rounded p-4 mb-3"
+        >
+            <h3>{app.name}</h3>
+
+            <p>{app.skill}</p>
+
+            <p>{app.location}</p>
+
+            <p>⭐ {app.rating}</p>
+
+            <button className="bg-green-600 text-white px-4 py-2 rounded">
+                Accept
+            </button>
+        </div>
+    ))
+)}
     </div>
   );
 };

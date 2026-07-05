@@ -33,14 +33,24 @@ const Login = () => {
 
       if (response.ok) {
         // Store IDs depending on role
-        if (formData.role === 'client' && data.clientId) {
-          localStorage.setItem('clientId', data.clientId);
+        if (formData.role === "client" && data.clientId) {
+          localStorage.setItem("clientId", data.clientId);
+
+          localStorage.setItem("name", data.user.name);
+          localStorage.setItem("email", data.user.email);
+          localStorage.setItem("location", data.user.location);
         }
 
-        if (formData.role === 'fundi' && data.fundiId) {
-          localStorage.setItem('fundiId', data.fundiId);
-        }
+        if (formData.role === "fundi" && data.fundiId) {
+          localStorage.setItem("fundiId", data.fundiId);
 
+          localStorage.setItem("name", data.user.name);
+          localStorage.setItem("email", data.user.email);
+          localStorage.setItem("location", data.user.location);
+          localStorage.setItem("skill", data.user.skill);
+          localStorage.setItem("bio", data.user.bio);
+          localStorage.setItem("rating", data.user.rating);
+        }
         if (formData.role === 'admin' && data.adminId) {
           localStorage.setItem('adminId', data.adminId);
         }

@@ -19,6 +19,8 @@ const Signup = () => {
     national_id: "",
     id_photo: null,
     profile_photo: null,
+    good_conduct_certificate: null,
+    professional_certificates: null,
   });
 
   const handleChange = (e) => {
@@ -82,6 +84,20 @@ const Signup = () => {
 
         data.append("id_photo", formData.id_photo);
         data.append("profile_photo", formData.profile_photo);
+
+        if (formData.good_conduct_certificate) {
+          data.append(
+            "good_conduct_certificate",
+            formData.good_conduct_certificate
+          );
+        }
+
+        if (formData.professional_certificates) {
+          data.append(
+            "professional_certificates",
+            formData.professional_certificates
+          );
+        }
 
         response = await fetch(
           "http://localhost:5001/api/auth/signup/fundi",
@@ -250,6 +266,34 @@ const Signup = () => {
                   onChange={handleChange}
                   className="w-full border rounded p-2"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-2 font-medium">
+                  Certificate of Good Conduct (optional)
+                </label>
+
+                <input
+                  type="file"
+                  name="good_conduct_certificate"
+                  accept="image/*,.pdf"
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-2 font-medium">
+                  Professional Certifications (optional)
+                </label>
+
+                <input
+                  type="file"
+                  name="professional_certificates"
+                  accept="image/*,.pdf"
+                  onChange={handleChange}
+                  className="w-full border rounded p-2"
                 />
               </div>
 

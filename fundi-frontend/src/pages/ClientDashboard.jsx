@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import PostJob from "./PostJob";
 import { formatTimeAgo } from "../utils/timeAgo";
 import MessagesPanel from "../components/MessagesPanel";
+import FundiProfile from "../components/FundiProfile";
 
 const TABS = [
   "My Jobs",
@@ -28,6 +29,9 @@ const ClientDashboard = () => {
   const [loadingFundis, setLoadingFundis] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [location, setLocation] = useState("");
+  const [selectedFundiId, setSelectedFundiId] = useState(null);
+  const [contactFundi, setContactFundi] = useState(null);
+  const [pendingChat, setPendingChat] = useState(null);
 
   // Notifications
   const [notifications, setNotifications] = useState([]);
@@ -238,22 +242,21 @@ const ClientDashboard = () => {
         Client Dashboard
       </h1>
 
-      <div className="flex gap-4 flex-wrap mb-8">
-
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded ${
-              activeTab === tab
-                ? "bg-black text-white"
-                : "bg-white border"
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-
+      <div className="mb-8 max-w-xs">
+        <label className="block text-sm font-semibold mb-2">
+          Dashboard Page
+        </label>
+        <select
+          value={activeTab}
+          onChange={(e) => setActiveTab(e.target.value)}
+          className="w-full bg-white border rounded px-4 py-2"
+        >
+          {TABS.map((tab) => (
+            <option key={tab} value={tab}>
+              {tab}
+            </option>
+          ))}
+        </select>
       </div>
 
       {activeTab === "My Jobs" && (
@@ -466,15 +469,17 @@ const ClientDashboard = () => {
                   <div className="flex gap-3 mt-6">
 
                     <button
+                      onClick={() => setSelectedFundiId(fundi.id)}
                       className="flex-1 bg-black text-white py-2 rounded hover:bg-gray-800"
                     >
                       View Profile
                     </button>
 
                     <button
-                      className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700"
+                      onClick={() => setContactFundi(fundi)}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
                     >
-                      Hire
+                      Contact
                     </button>
 
                   </div>
@@ -498,7 +503,11 @@ const ClientDashboard = () => {
             Messages
           </h2>
 
-          <MessagesPanel clientJobs={jobs} />
+          <MessagesPanel
+            clientJobs={jobs}
+            pendingChat={pendingChat}
+            onChatStarted={() => setPendingChat(null)}
+          />
 
         </div>
       )}
@@ -746,6 +755,64 @@ const ClientDashboard = () => {
 
           </div>
 
+        </div>
+      )}
+
+      {selectedFundiId && (
+        <FundiProfile
+          fundiId={selectedFundiId}
+          onClose={() => setSelectedFundiId(null)}
+          onMessage={(fundi) => {
+            setSelectedFundiId(null);
+            setPendingChat({
+              otherUserId: fundi.id,
+              otherUserRole: "fundi",
+              otherUserName: fundi.name,
+            });
+            setActiveTab("Messages");
+          }}
+        />
+      )}
+
+      {contactFundi && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Contact {contactFundi.name}</h2>
+              <button
+                onClick={() => setContactFundi(null)}
+                className="text-gray-500 hover:text-gray-800 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="font-semibold">Email:</span>{" "}
+                {contactFundi.email || "Not provided"}
+              </p>
+              <p>
+                <span className="font-semibold">Phone:</span>{" "}
+                {contactFundi.phone_number || "Not provided"}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setPendingChat({
+                  otherUserId: contactFundi.id,
+                  otherUserRole: "fundi",
+                  otherUserName: contactFundi.name,
+                });
+                setContactFundi(null);
+                setActiveTab("Messages");
+              }}
+              className="mt-5 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            >
+              Open Messages
+            </button>
+          </div>
         </div>
       )}
 

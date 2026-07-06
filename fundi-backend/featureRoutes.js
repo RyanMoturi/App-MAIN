@@ -76,6 +76,19 @@ module.exports = (io) => {
       const [[job]] = await db.query("SELECT id FROM jobs WHERE id = ?", [jobId]);
       if (!job) return res.status(404).json({ error: "Job not found" });
 
+      const [[fundi]] = await db.query(
+        "SELECT is_verified, is_banned FROM fundis WHERE id = ?",
+        [fundi_id]
+      );
+
+      if (!fundi?.is_verified) {
+        return res.status(403).json({ error: "Your account is pending admin verification" });
+      }
+
+      if (fundi.is_banned) {
+        return res.status(403).json({ error: "Your account has been banned by admin" });
+      }
+
       const [[accepted]] = await db.query(
         "SELECT id FROM applications WHERE job_id = ? AND status = 'Accepted' LIMIT 1",
         [jobId]
@@ -200,8 +213,48 @@ module.exports = (io) => {
         [job_id, sender_id, receiver_id, sender_id, receiver_id]
       );
 
-      if (!assignment) {
-        return res.status(403).json({ error: "Messages are only available after job acceptance" });
+      let messageJob = assignment;
+
+      if (!messageJob) {
+        const [[clientContactJob]] = await db.query(
+          `SELECT id AS job_id, client_id, title
+           FROM jobs
+           WHERE id = ?
+             AND client_id = ?
+             AND ? = 'client'
+             AND ? = 'fundi'`,
+          [job_id, sender_id, sender_role, receiver_role]
+        );
+
+        const [[existingThread]] = await db.query(
+          `SELECT j.id AS job_id, j.client_id, j.title
+           FROM messages m
+           JOIN jobs j ON j.id = m.job_id
+           WHERE m.job_id = ?
+             AND (
+              (m.sender_id = ? AND m.sender_role = ? AND m.receiver_id = ? AND m.receiver_role = ?)
+              OR
+              (m.sender_id = ? AND m.sender_role = ? AND m.receiver_id = ? AND m.receiver_role = ?)
+             )
+           LIMIT 1`,
+          [
+            job_id,
+            sender_id,
+            sender_role,
+            receiver_id,
+            receiver_role,
+            receiver_id,
+            receiver_role,
+            sender_id,
+            sender_role,
+          ]
+        );
+
+        messageJob = clientContactJob || existingThread;
+      }
+
+      if (!messageJob) {
+        return res.status(403).json({ error: "Messages are only available for accepted jobs or client contact requests" });
       }
 
       const [result] = await db.query(
@@ -227,14 +280,14 @@ module.exports = (io) => {
         receiver_id,
         receiver_role,
         "message",
-        `${senderName} sent you a message about "${assignment.title}".`
+        `${senderName} sent you a message about "${messageJob.title}".`
       );
 
       if (io) {
         io.to(`user_${receiver_role}_${receiver_id}`).emit("receive_message", messagePayload);
         io.to(`user_${receiver_role}_${receiver_id}`).emit("receive_notification", {
           type: "message",
-          content: `${senderName} sent you a message about "${assignment.title}".`,
+          content: `${senderName} sent you a message about "${messageJob.title}".`,
         });
       }
 
@@ -347,6 +400,92 @@ module.exports = (io) => {
           last_sent_at: lastMessage?.sent_at || assignment.assigned_at,
         });
       }
+
+      const [messageThreads] = await db.query(
+        userRole === "client"
+          ? `SELECT
+              m.job_id,
+              j.title AS job_title,
+              f.id AS other_user_id,
+              'fundi' AS other_user_role,
+              f.name AS other_user_name,
+              MIN(m.sent_at) AS assigned_at,
+              NULL AS completed_at,
+              MAX(m.sent_at) AS last_sent_at
+             FROM messages m
+             JOIN jobs j ON j.id = m.job_id
+             JOIN fundis f ON f.id = CASE
+                WHEN m.sender_role = 'fundi' THEN m.sender_id
+                ELSE m.receiver_id
+              END
+             WHERE (m.sender_id = ? AND m.sender_role = 'client')
+                OR (m.receiver_id = ? AND m.receiver_role = 'client')
+             GROUP BY m.job_id, j.title, f.id, f.name`
+          : `SELECT
+              m.job_id,
+              j.title AS job_title,
+              c.id AS other_user_id,
+              'client' AS other_user_role,
+              c.name AS other_user_name,
+              MIN(m.sent_at) AS assigned_at,
+              NULL AS completed_at,
+              MAX(m.sent_at) AS last_sent_at
+             FROM messages m
+             JOIN jobs j ON j.id = m.job_id
+             JOIN clients c ON c.id = CASE
+                WHEN m.sender_role = 'client' THEN m.sender_id
+                ELSE m.receiver_id
+              END
+             WHERE (m.sender_id = ? AND m.sender_role = 'fundi')
+                OR (m.receiver_id = ? AND m.receiver_role = 'fundi')
+             GROUP BY m.job_id, j.title, c.id, c.name`,
+        [userId, userId]
+      );
+
+      for (const thread of messageThreads) {
+        const exists = conversations.some(
+          (conversation) =>
+            String(conversation.job_id) === String(thread.job_id) &&
+            String(conversation.other_user_id) === String(thread.other_user_id) &&
+            conversation.other_user_role === thread.other_user_role
+        );
+
+        if (exists) continue;
+
+        const [[lastMessage]] = await db.query(
+          `SELECT content, sent_at
+           FROM messages
+           WHERE job_id = ?
+             AND (
+              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
+              OR
+              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
+             )
+           ORDER BY sent_at DESC
+           LIMIT 1`,
+          [
+            thread.job_id,
+            userId,
+            userRole,
+            thread.other_user_id,
+            thread.other_user_role,
+            thread.other_user_id,
+            thread.other_user_role,
+            userId,
+            userRole,
+          ]
+        );
+
+        conversations.push({
+          ...thread,
+          last_message: lastMessage?.content || "Conversation ready",
+          last_sent_at: lastMessage?.sent_at || thread.last_sent_at,
+        });
+      }
+
+      conversations.sort(
+        (a, b) => new Date(b.last_sent_at) - new Date(a.last_sent_at)
+      );
 
       res.json(conversations);
     } catch (err) {

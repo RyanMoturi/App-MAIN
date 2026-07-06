@@ -49,6 +49,32 @@ router.post("/apply", async (req, res) => {
       });
     }
 
+    const [[fundiAccount]] = await db.query(
+      "SELECT is_verified, verification_status, is_banned FROM fundis WHERE id = ?",
+      [fundiId]
+    );
+
+    if (!fundiAccount) {
+      return res.status(404).json({
+        message: "Fundi account not found.",
+      });
+    }
+
+    if (!fundiAccount.is_verified) {
+      return res.status(403).json({
+        message:
+          fundiAccount.verification_status === "Rejected"
+            ? "Your fundi account was not verified. Please contact admin."
+            : "Your fundi account is pending admin verification. You cannot apply yet.",
+      });
+    }
+
+    if (fundiAccount.is_banned) {
+      return res.status(403).json({
+        message: "Your fundi account has been banned by admin.",
+      });
+    }
+
     const [existing] = await db.query(
       "SELECT id FROM applications WHERE job_id = ? AND fundi_id = ?",
       [jobId, fundiId]

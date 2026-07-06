@@ -84,6 +84,8 @@ router.post(
   upload.fields([
     { name: "id_photo", maxCount: 1 },
     { name: "profile_photo", maxCount: 1 },
+    { name: "good_conduct_certificate", maxCount: 1 },
+    { name: "professional_certificates", maxCount: 1 },
   ]),
   async (req, res) => {
     const {
@@ -127,6 +129,10 @@ router.post(
       // Store the actual image bytes
       const idPhoto = req.files.id_photo[0].buffer;
       const profilePhoto = req.files.profile_photo[0].buffer;
+      const goodConductCertificate =
+        req.files.good_conduct_certificate?.[0]?.buffer || null;
+      const professionalCertificates =
+        req.files.professional_certificates?.[0]?.buffer || null;
 
       const hashedPassword = await bcrypt.hash(
         password,
@@ -141,29 +147,37 @@ router.post(
           national_id,
           id_photo,
           profile_photo,
+          good_conduct_certificate,
+          professional_certificates,
           skill,
           bio,
           location,
           password_hash,
-          rating
+          rating,
+          is_verified,
+          verification_status
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           name,
           email,
           national_id,
           idPhoto,
           profilePhoto,
+          goodConductCertificate,
+          professionalCertificates,
           skill,
           bio,
           location,
           hashedPassword,
           5.0,
+          0,
+          "Pending",
         ]
       );
 
       res.status(201).json({
-        message: "Fundi registered successfully",
+        message: "Fundi registered successfully. Your account is pending admin verification.",
       });
 
     } catch (err) {
@@ -256,6 +270,9 @@ router.post("/login", async (req, res) => {
       response.user.bio = user.bio;
       response.user.rating = user.rating;
       response.user.national_id = user.national_id;
+      response.user.is_verified = Boolean(user.is_verified);
+      response.user.verification_status = user.verification_status;
+      response.user.verification_note = user.verification_note;
 
       // Convert BLOB images to Base64 strings
       response.user.id_photo = user.id_photo

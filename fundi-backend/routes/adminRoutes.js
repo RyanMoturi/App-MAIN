@@ -6,6 +6,11 @@ const router = express.Router();
 
 const saltRounds = 10;
 
+const toDataUrl = (buffer, mimeType = "image/jpeg") => {
+  if (!buffer) return null;
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
+};
+
 // ================= ADMIN SIGNUP =================
 router.post("/signup", async (req, res) => {
   const {
@@ -88,7 +93,7 @@ router.get("/dashboard", async (req, res) => {
     `);
 
     const [recentFundis] = await db.query(`
-      SELECT id,name,skill,location,rating,created_at
+      SELECT id,name,skill,location,rating,is_verified,verification_status,is_flagged,is_banned,created_at
       FROM fundis
       ORDER BY created_at DESC
       LIMIT 5
@@ -233,6 +238,10 @@ router.get("/fundis", async (req, res) => {
         skill,
         location,
         rating,
+        is_verified,
+        verification_status,
+        is_flagged,
+        is_banned,
         created_at
       FROM fundis
       ORDER BY created_at DESC
@@ -283,6 +292,87 @@ router.delete("/fundi/:id", async (req, res) => {
 
   }
 
+});
+
+// ================= GET FUNDI VERIFICATION DETAILS =================
+router.get("/fundi/:id", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+        id,
+        name,
+        email,
+        national_id,
+        id_photo,
+        profile_photo,
+        good_conduct_certificate,
+        professional_certificates,
+        skill,
+        bio,
+        location,
+        phone_number,
+        rating,
+        is_verified,
+        verification_status,
+        verification_note,
+        is_flagged,
+        is_banned,
+        created_at
+       FROM fundis
+       WHERE id = ?`,
+      [req.params.id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "Fundi not found" });
+    }
+
+    res.json({
+      ...rows[0],
+      id_photo: toDataUrl(rows[0].id_photo),
+      profile_photo: toDataUrl(rows[0].profile_photo),
+      good_conduct_certificate: toDataUrl(
+        rows[0].good_conduct_certificate,
+        "application/octet-stream"
+      ),
+      professional_certificates: toDataUrl(
+        rows[0].professional_certificates,
+        "application/octet-stream"
+      ),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load fundi details" });
+  }
+});
+
+// ================= VERIFY / REJECT FUNDI =================
+router.put("/fundi/:id/verification", async (req, res) => {
+  const { status, note } = req.body;
+
+  if (!["Verified", "Rejected", "Pending"].includes(status)) {
+    return res.status(400).json({ error: "Invalid verification status" });
+  }
+
+  try {
+    const isVerified = status === "Verified" ? 1 : 0;
+
+    const [result] = await db.query(
+      `UPDATE fundis
+       SET is_verified = ?, verification_status = ?, verification_note = ?
+       WHERE id = ?`,
+      [isVerified, status, note || null, req.params.id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Fundi not found" });
+    }
+
+    res.json({ message: `Fundi marked as ${status}.` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update verification" });
+  }
 });
 
 module.exports = router;

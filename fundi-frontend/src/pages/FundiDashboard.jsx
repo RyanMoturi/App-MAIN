@@ -41,12 +41,23 @@ const FundiDashboard = () => {
     bio: "",
     national_id: "",
     phone_number: "",
+    is_verified: false,
+    verification_status: "Pending",
+    verification_note: "",
     rating: 5,
     profile_photo: "",
+    good_conduct_certificate: "",
+    professional_certificates: "",
   });
 
   const [newPhoto, setNewPhoto] = useState(null);
+  const [goodConductCertificate, setGoodConductCertificate] = useState(null);
+  const [professionalCertificates, setProfessionalCertificates] = useState(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const isVerified =
+    profile.is_verified === true ||
+    profile.is_verified === 1 ||
+    profile.is_verified === "1";
 
   useEffect(() => {
     const role = localStorage.getItem("role");
@@ -76,8 +87,16 @@ const FundiDashboard = () => {
       fetchCompletedJobs();
     }
 
+    if (activeTab === "Portfolio") {
+      fetchCompletedJobs();
+    }
+
     if (activeTab === "Notifications") {
       fetchNotifications();
+    }
+
+    if (activeTab === "Profile") {
+      fetchProfile();
     }
   }, [activeTab]);
 
@@ -222,6 +241,14 @@ const FundiDashboard = () => {
         formData.append("profile_photo", newPhoto);
       }
 
+      if (goodConductCertificate) {
+        formData.append("good_conduct_certificate", goodConductCertificate);
+      }
+
+      if (professionalCertificates) {
+        formData.append("professional_certificates", professionalCertificates);
+      }
+
       const res = await fetch(`/api/fundi/${fundiId}`, {
         method: "PUT",
         body: formData,
@@ -229,16 +256,29 @@ const FundiDashboard = () => {
 
       const data = await res.json();
 
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save profile");
+      }
+
+      localStorage.setItem("name", profile.name);
+      localStorage.setItem("email", profile.email);
+      localStorage.setItem("location", profile.location);
+      localStorage.setItem("skill", profile.skill);
+      localStorage.setItem("bio", profile.bio);
+
       alert(data.message);
 
       fetchProfile();
       setEditingProfile(false);
       setNewPhoto(null);
+      setGoodConductCertificate(null);
+      setProfessionalCertificates(null);
 
       setSavingProfile(false);
 
     } catch (err) {
       console.log(err);
+      alert(err.message || "Failed to save profile");
       setSavingProfile(false);
     }
   };
@@ -246,20 +286,30 @@ const FundiDashboard = () => {
   <div className="p-6 bg-gray-100 min-h-screen">
     <h1 className="text-3xl font-bold mb-4">Fundi Dashboard</h1>
 
-    <div className="flex gap-4 mb-6 flex-wrap">
-      {TABS.map((tab) => (
-        <button
-          key={tab}
-          onClick={() => setActiveTab(tab)}
-          className={`px-4 py-2 rounded ${
-            activeTab === tab
-              ? "bg-black text-white"
-              : "bg-white border"
-          }`}
-        >
-          {tab}
-        </button>
-      ))}
+    {!isVerified && (
+      <div className="mb-4 bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded">
+        Verification status: {profile.verification_status || "Pending"}.
+        {" "}
+        You can browse jobs, but you cannot apply until an admin verifies your account.
+        {profile.verification_note && (
+          <span className="block mt-1">Admin note: {profile.verification_note}</span>
+        )}
+      </div>
+    )}
+
+    <div className="mb-6 max-w-xs">
+      <label className="block text-sm font-semibold mb-2">Dashboard Page</label>
+      <select
+        value={activeTab}
+        onChange={(e) => setActiveTab(e.target.value)}
+        className="w-full bg-white border rounded px-4 py-2"
+      >
+        {TABS.map((tab) => (
+          <option key={tab} value={tab}>
+            {tab}
+          </option>
+        ))}
+      </select>
     </div>
 
     {/* ================= FIND JOBS ================= */}
@@ -333,9 +383,9 @@ const FundiDashboard = () => {
                 </div>
 
                 <button
-                  disabled={isTaken || applyingJobId === job.id}
+                  disabled={!isVerified || isTaken || applyingJobId === job.id}
                   className={`px-4 py-2 rounded h-fit ${
-                    isTaken
+                    !isVerified || isTaken
                       ? "bg-gray-300 text-gray-600 cursor-not-allowed"
                       : "bg-green-600 text-white hover:bg-green-700"
                   } disabled:opacity-70`}
@@ -376,6 +426,8 @@ const FundiDashboard = () => {
                 >
                   {isTaken
                     ? "Unavailable"
+                    : !isVerified
+                      ? "Pending Verification"
                     : applyingJobId === job.id
                       ? "Applying..."
                       : "Apply"}
@@ -589,12 +641,265 @@ const FundiDashboard = () => {
 )}
 {activeTab === "Profile" && (
   <div>
-    <h2 className="text-xl font-semibold mb-4">Profile</h2>
+    <h2 className="text-2xl font-semibold mb-6">My Profile</h2>
 
-    <div className="bg-white p-6 rounded shadow flex flex-col md:flex-row gap-6">
+    <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+      <div className="mb-5 flex items-center gap-4">
+        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200">
+          {newPhoto || profile.profile_photo ? (
+            <img
+              src={
+                newPhoto
+                  ? URL.createObjectURL(newPhoto)
+                  : profile.profile_photo
+              }
+              alt="Profile"
+              className="w-full h-full object-cover"
+            />
+          ) : null}
+        </div>
+
+        <div className="flex-1">
+          <p className="font-semibold">{profile.name || "Your Name"}</p>
+          <p className="text-sm text-gray-500">
+            {profile.skill || "Skill not set"}
+          </p>
+          <p className="text-sm text-gray-500">
+            Verification: {profile.verification_status || "Pending"}
+          </p>
+        </div>
+
+        {editingProfile && (
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setNewPhoto(e.target.files[0])}
+          />
+        )}
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Name</label>
+        <input
+          type="text"
+          value={profile.name || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, name: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Email</label>
+        <input
+          type="email"
+          value={profile.email || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, email: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">National ID</label>
+        <input
+          type="text"
+          value={profile.national_id || ""}
+          readOnly
+          className="w-full border rounded px-4 py-2 bg-gray-100"
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Phone Number</label>
+        <input
+          type="text"
+          value={profile.phone_number || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, phone_number: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Location</label>
+        <input
+          type="text"
+          value={profile.location || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, location: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Skill</label>
+        <input
+          type="text"
+          value={profile.skill || ""}
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, skill: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Bio</label>
+        <textarea
+          value={profile.bio || ""}
+          rows="4"
+          readOnly={!editingProfile}
+          onChange={(e) =>
+            setProfile({ ...profile, bio: e.target.value })
+          }
+          className={`w-full border rounded px-4 py-2 ${
+            editingProfile ? "bg-white" : "bg-gray-100"
+          }`}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Role</label>
+        <input
+          type="text"
+          value="Fundi"
+          readOnly
+          className="w-full border rounded px-4 py-2 bg-gray-100"
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">Average Rating</label>
+        <input
+          type="text"
+          value={`${profile.rating || 5}/5`}
+          readOnly
+          className="w-full border rounded px-4 py-2 bg-gray-100"
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">
+          Certificate of Good Conduct
+        </label>
+        {profile.good_conduct_certificate && !goodConductCertificate && (
+          <a
+            href={profile.good_conduct_certificate}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-sm text-blue-600 hover:underline mb-2"
+          >
+            View uploaded certificate
+          </a>
+        )}
+        {editingProfile && (
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            onChange={(e) => setGoodConductCertificate(e.target.files[0])}
+            className="w-full border rounded px-4 py-2"
+          />
+        )}
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">
+          Professional Certifications
+        </label>
+        {profile.professional_certificates && !professionalCertificates && (
+          <a
+            href={profile.professional_certificates}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-sm text-blue-600 hover:underline mb-2"
+          >
+            View uploaded certifications
+          </a>
+        )}
+        {editingProfile && (
+          <input
+            type="file"
+            accept="image/*,.pdf"
+            onChange={(e) => setProfessionalCertificates(e.target.files[0])}
+            className="w-full border rounded px-4 py-2"
+          />
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        {editingProfile ? (
+          <>
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile}
+              className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+            >
+              {savingProfile ? "Saving..." : "Save Profile"}
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingProfile(false);
+                setNewPhoto(null);
+                setGoodConductCertificate(null);
+                setProfessionalCertificates(null);
+                fetchProfile();
+              }}
+              className="bg-gray-300 px-5 py-2 rounded hover:bg-gray-400"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => setEditingProfile(true)}
+            className="bg-black text-white px-5 py-2 rounded hover:bg-gray-800"
+          >
+            Edit Profile
+          </button>
+        )}
+
+        <button
+          onClick={() => {
+            localStorage.clear();
+            navigate("/login");
+          }}
+          className="bg-red-600 text-white px-5 py-2 rounded hover:bg-red-700"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{activeTab === "Profile" && false && (
+  <div>
+    <h2 className="text-2xl font-semibold mb-6">My Profile</h2>
+
+    <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
 
       {/* ================= LEFT: PROFILE CARD ================= */}
-      <div className="md:w-1/3 flex flex-col items-center text-center border-r md:pr-6">
+      <div className="flex flex-col items-center text-center border-b pb-6 mb-6">
 
         {/* Profile Image */}
         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-200 mb-4">
@@ -622,7 +927,7 @@ const FundiDashboard = () => {
       </div>
 
       {/* ================= RIGHT: EDIT FORM ================= */}
-      <div className="md:w-2/3 space-y-3">
+      <div className="space-y-3">
 
         <input
           className={`w-full border p-2 rounded ${
@@ -758,28 +1063,44 @@ const FundiDashboard = () => {
 
     <div className="bg-white p-6 rounded shadow">
       <p className="text-gray-500 mb-4">
-        Showcase your past work here.
+        Your completed jobs, ratings, reviews, and completion dates appear here.
       </p>
 
-      {portfolio.length === 0 ? (
+      {completedJobs.length === 0 ? (
         <p className="text-gray-500">
-          No portfolio items uploaded yet.
+          No completed jobs in your portfolio yet.
         </p>
       ) : (
-        <div className="grid md:grid-cols-3 gap-4">
-          {portfolio.map((item) => (
+        <div className="space-y-4">
+          {completedJobs.map((job) => (
             <div
-              key={item.id}
-              className="border rounded p-3"
+              key={job.id}
+              className="border rounded p-4"
             >
-              <img
-                src={item.image}
-                alt=""
-                className="w-full h-32 object-cover rounded"
-              />
-              <p className="mt-2 font-semibold">
-                {item.title}
-              </p>
+              <div className="flex justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold">{job.title}</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {job.description}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Completed on{" "}
+                    {job.completed_at
+                      ? new Date(job.completed_at).toLocaleDateString()
+                      : "Not recorded"}
+                  </p>
+                </div>
+                <span className="text-yellow-600 font-semibold whitespace-nowrap">
+                  Rating: {job.rating || "Not rated"}/5
+                </span>
+              </div>
+
+              <div className="mt-3 bg-gray-50 rounded p-3">
+                <p className="text-sm font-semibold">Client Review</p>
+                <p className="text-sm text-gray-700 mt-1">
+                  {job.comment || "No review left yet."}
+                </p>
+              </div>
             </div>
           ))}
         </div>

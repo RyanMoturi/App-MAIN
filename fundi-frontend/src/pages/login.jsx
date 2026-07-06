@@ -52,6 +52,8 @@ const Login = () => {
           localStorage.setItem("skill", data.user.skill);
           localStorage.setItem("bio", data.user.bio);
           localStorage.setItem("rating", data.user.rating);
+          localStorage.setItem("is_verified", data.user.is_verified ? "1" : "0");
+          localStorage.setItem("verification_status", data.user.verification_status || "Pending");
         }
         if (formData.role === 'admin' && data.adminId) {
           localStorage.setItem('adminId', data.adminId);

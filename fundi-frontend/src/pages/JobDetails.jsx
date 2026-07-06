@@ -15,9 +15,14 @@ const JobDetails = () => {
   const [acceptingId, setAcceptingId] = useState(null);
   const [completing, setCompleting] = useState(false);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
   const [review, setReview] = useState({
     rating: '5',
     comment: '',
+  });
+  const [report, setReport] = useState({
+    reason: '',
+    details: '',
   });
   const [formData, setFormData] = useState({
     title: '',
@@ -214,6 +219,48 @@ const JobDetails = () => {
     }
   };
 
+  const handleSubmitReport = async (e) => {
+    e.preventDefault();
+
+    if (!acceptedApplication) {
+      alert('No accepted fundi found for this job.');
+      return;
+    }
+
+    if (!report.reason.trim()) {
+      alert('Please enter a report reason.');
+      return;
+    }
+
+    setSubmittingReport(true);
+
+    try {
+      const res = await fetch('/api/reports/fundi-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: Number(id),
+          client_id: Number(clientId),
+          fundi_id: acceptedApplication.fundi_id,
+          reason: report.reason,
+          details: report.details,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit report.');
+      }
+
+      alert(data.message);
+      setReport({ reason: '', details: '' });
+    } catch (err) {
+      alert(err.message || 'Failed to submit report.');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-12">Loading job...</div>;
   }
@@ -394,6 +441,45 @@ const JobDetails = () => {
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
               >
                 {submittingReview ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </form>
+          )}
+
+          {isOwner && acceptedApplication && (
+            <form
+              onSubmit={handleSubmitReport}
+              className="mt-5 border-t pt-4 space-y-3"
+            >
+              <h3 className="font-semibold text-red-700">Report this fundi</h3>
+              <p className="text-sm text-gray-600">
+                Use this if the fundi broke something, behaved wrongly, or did not follow the agreement.
+              </p>
+
+              <input
+                value={report.reason}
+                onChange={(e) =>
+                  setReport({ ...report, reason: e.target.value })
+                }
+                placeholder="Short reason"
+                className="w-full border p-2 rounded"
+              />
+
+              <textarea
+                value={report.details}
+                onChange={(e) =>
+                  setReport({ ...report, details: e.target.value })
+                }
+                placeholder="Explain what happened..."
+                className="w-full border p-2 rounded"
+                rows="3"
+              />
+
+              <button
+                type="submit"
+                disabled={submittingReport}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {submittingReport ? 'Submitting...' : 'Submit Report'}
               </button>
             </form>
           )}

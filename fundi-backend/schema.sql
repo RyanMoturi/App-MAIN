@@ -28,7 +28,14 @@ CREATE TABLE IF NOT EXISTS fundis (
   rating DECIMAL(3, 2) DEFAULT 0.00,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   password_hash VARCHAR(255),
-  phone_number INT
+  phone_number INT,
+  is_verified TINYINT(1) DEFAULT 0,
+  verification_status ENUM('Pending', 'Verified', 'Rejected') DEFAULT 'Pending',
+  verification_note TEXT,
+  good_conduct_certificate LONGBLOB,
+  professional_certificates LONGBLOB,
+  is_flagged TINYINT(1) DEFAULT 0,
+  is_banned TINYINT(1) DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS admins (
@@ -129,4 +136,20 @@ CREATE TABLE IF NOT EXISTS reviews (
   FOREIGN KEY (fundi_id) REFERENCES fundis(id),
   FOREIGN KEY (client_id) REFERENCES clients(id),
   FOREIGN KEY (job_id) REFERENCES jobs(id)
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  job_id INT NOT NULL,
+  client_id INT NOT NULL,
+  fundi_id INT NOT NULL,
+  reason VARCHAR(255) NOT NULL,
+  details TEXT,
+  status ENUM('Pending', 'Reviewed', 'Dismissed') DEFAULT 'Pending',
+  admin_note TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TIMESTAMP NULL,
+  FOREIGN KEY (job_id) REFERENCES jobs(id),
+  FOREIGN KEY (client_id) REFERENCES clients(id),
+  FOREIGN KEY (fundi_id) REFERENCES fundis(id)
 );

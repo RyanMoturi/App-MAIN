@@ -5,9 +5,9 @@ const db = require("../db");
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-const toDataUrl = (buffer) => {
+const toDataUrl = (buffer, mimeType = "image/jpeg") => {
   if (!buffer) return null;
-  return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
 };
 
 // ================= GET ALL FUNDIS =================
@@ -42,6 +42,7 @@ router.get("/", async (req, res) => {
         bio,
         location,
         rating,
+        phone_number,
         created_at
       FROM fundis
       ${where}
@@ -79,6 +80,7 @@ router.get("/search/:search", async (req, res) => {
         bio,
         location,
         rating,
+        phone_number,
         created_at
       FROM fundis
       WHERE
@@ -118,7 +120,8 @@ router.get("/category/:skill", async (req, res) => {
         skill,
         bio,
         location,
-        rating
+        rating,
+        phone_number
       FROM fundis
       WHERE skill = ?
       ORDER BY rating DESC`,
@@ -187,8 +190,13 @@ router.get("/:id", async (req, res) => {
         location,
         phone_number,
         national_id,
+        is_verified,
+        verification_status,
+        verification_note,
         rating,
         profile_photo,
+        good_conduct_certificate,
+        professional_certificates,
         created_at
       FROM fundis
       WHERE id=?`,
@@ -204,6 +212,14 @@ router.get("/:id", async (req, res) => {
     res.json({
       ...rows[0],
       profile_photo: toDataUrl(rows[0].profile_photo),
+      good_conduct_certificate: toDataUrl(
+        rows[0].good_conduct_certificate,
+        "application/octet-stream"
+      ),
+      professional_certificates: toDataUrl(
+        rows[0].professional_certificates,
+        "application/octet-stream"
+      ),
     });
 
   } catch (err) {
@@ -219,7 +235,14 @@ router.get("/:id", async (req, res) => {
 });
 
 // ================= UPDATE ONE FUNDI =================
-router.put("/:id", upload.single("profile_photo"), async (req, res) => {
+router.put(
+  "/:id",
+  upload.fields([
+    { name: "profile_photo", maxCount: 1 },
+    { name: "good_conduct_certificate", maxCount: 1 },
+    { name: "professional_certificates", maxCount: 1 },
+  ]),
+  async (req, res) => {
   try {
     const { name, email, location, skill, bio, phone_number } = req.body;
 
@@ -233,21 +256,39 @@ router.put("/:id", upload.single("profile_photo"), async (req, res) => {
       });
     }
 
-    if (req.file) {
-      await db.query(
-        `UPDATE fundis
-         SET name = ?, email = ?, location = ?, skill = ?, bio = ?, phone_number = ?, profile_photo = ?
-         WHERE id = ?`,
-        [name, email, location, skill, bio, phone_number, req.file.buffer, req.params.id]
-      );
-    } else {
-      await db.query(
-        `UPDATE fundis
-         SET name = ?, email = ?, location = ?, skill = ?, bio = ?, phone_number = ?
-         WHERE id = ?`,
-        [name, email, location, skill, bio, phone_number, req.params.id]
-      );
+    const updates = [
+      "name = ?",
+      "email = ?",
+      "location = ?",
+      "skill = ?",
+      "bio = ?",
+      "phone_number = ?",
+    ];
+    const params = [name, email, location, skill, bio, phone_number];
+
+    if (req.files?.profile_photo?.[0]) {
+      updates.push("profile_photo = ?");
+      params.push(req.files.profile_photo[0].buffer);
     }
+
+    if (req.files?.good_conduct_certificate?.[0]) {
+      updates.push("good_conduct_certificate = ?");
+      params.push(req.files.good_conduct_certificate[0].buffer);
+    }
+
+    if (req.files?.professional_certificates?.[0]) {
+      updates.push("professional_certificates = ?");
+      params.push(req.files.professional_certificates[0].buffer);
+    }
+
+    params.push(req.params.id);
+
+    await db.query(
+      `UPDATE fundis
+       SET ${updates.join(", ")}
+       WHERE id = ?`,
+      params
+    );
 
     res.json({
       message: "Profile updated successfully",

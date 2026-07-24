@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatTimeAgo } from '../utils/timeAgo';
 
 const JobList = () => {
   const [jobs, setJobs] = useState([]);
@@ -41,7 +42,15 @@ const JobList = () => {
               )}
               <a href={`/jobs/${job.id}`} className="text-xl font-semibold text-black hover:text-yellow-600">{job.title}</a>
               <p className="text-gray-600">{job.location}</p>
+              <p className="text-sm text-gray-500 mt-1">{formatTimeAgo(job.created_at)}</p>
               <p className="text-gray-700 mt-2">{job.description}</p>
+              <p
+                className={`mt-2 text-sm font-semibold ${
+                  job.status && job.status !== 'Open' ? 'text-red-600' : 'text-green-600'
+                }`}
+              >
+                Status: {job.status || 'Open'}
+              </p>
             </li>
           ))}
         </ul>

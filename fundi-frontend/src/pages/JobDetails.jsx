@@ -1,15 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { formatTimeAgo } from '../utils/timeAgo';
 
 const JobDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
+  const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [acceptingId, setAcceptingId] = useState(null);
+  const [completing, setCompleting] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [review, setReview] = useState({
+    rating: '5',
+    comment: '',
+  });
+  const [report, setReport] = useState({
+    reason: '',
+    details: '',
+  });
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -23,30 +37,40 @@ const JobDetails = () => {
   const isOwner = role === 'client' && job && String(job.client_id) === String(clientId);
   const backLink = role === 'client' ? '/client-dashboard' : '/jobs';
   const backLabel = role === 'client' ? 'Back to My Jobs' : 'Back to Job List';
+  const isTaken = job?.status && job.status !== 'Open';
+  const acceptedApplication = applications.find((app) => app.status === 'Accepted');
+
+  const fetchJob = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/jobs/${id}`);
+      if (!res.ok) throw new Error('Job not found');
+      const data = await res.json();
+      setJob(data);
+      setFormData({
+        title: data.title || '',
+        description: data.description || '',
+        skillRequired: data.skill_required || '',
+        location: data.location || '',
+        image: null,
+      });
+    } catch {
+      setError('Failed to load job details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchApplications = async () => {
+    const appRes = await fetch(`/api/applications/job/${id}`);
+    const appData = await appRes.json();
+    setApplications(Array.isArray(appData) ? appData : []);
+  };
 
   useEffect(() => {
-    const fetchJob = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/jobs/${id}`);
-        if (!res.ok) throw new Error('Job not found');
-        const data = await res.json();
-        setJob(data);
-        setFormData({
-          title: data.title || '',
-          description: data.description || '',
-          skillRequired: data.skill_required || '',
-          location: data.location || '',
-          image: null,
-        });
-      } catch {
-        setError('Failed to load job details.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchJob();
+    fetchApplications();
   }, [id]);
 
   const handleChange = (e) => {
@@ -105,6 +129,135 @@ const JobDetails = () => {
     } catch {
       alert('Failed to delete job.');
       setDeleting(false);
+    }
+  };
+
+  const handleAccept = async (applicationId) => {
+    setAcceptingId(applicationId);
+
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/accept`, {
+        method: 'PUT',
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to accept application.');
+      }
+
+      alert(data.message);
+      await fetchJob();
+      await fetchApplications();
+    } catch (err) {
+      alert(err.message || 'Failed to accept application.');
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  const handleCompleteJob = async () => {
+    setCompleting(true);
+
+    try {
+      const res = await fetch(`/api/jobs/${id}/complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to complete job.');
+      }
+
+      alert(data.message);
+      await fetchJob();
+      await fetchApplications();
+    } catch (err) {
+      alert(err.message || 'Failed to complete job.');
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+
+    if (!acceptedApplication) {
+      alert('No accepted fundi found for this job.');
+      return;
+    }
+
+    setSubmittingReview(true);
+
+    try {
+      const res = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: Number(id),
+          client_id: Number(clientId),
+          fundi_id: acceptedApplication.fundi_id,
+          rating: Number(review.rating),
+          comment: review.comment,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit review.');
+      }
+
+      alert(data.message);
+      setReview({ rating: '5', comment: '' });
+      await fetchJob();
+      await fetchApplications();
+    } catch (err) {
+      alert(err.message || 'Failed to submit review.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleSubmitReport = async (e) => {
+    e.preventDefault();
+
+    if (!acceptedApplication) {
+      alert('No accepted fundi found for this job.');
+      return;
+    }
+
+    if (!report.reason.trim()) {
+      alert('Please enter a report reason.');
+      return;
+    }
+
+    setSubmittingReport(true);
+
+    try {
+      const res = await fetch('/api/reports/fundi-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: Number(id),
+          client_id: Number(clientId),
+          fundi_id: acceptedApplication.fundi_id,
+          reason: report.reason,
+          details: report.details,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit report.');
+      }
+
+      alert(data.message);
+      setReport({ reason: '', details: '' });
+    } catch (err) {
+      alert(err.message || 'Failed to submit report.');
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -216,6 +369,7 @@ const JobDetails = () => {
             <img src={job.image_url} alt={job.title} className="w-full h-48 object-cover rounded mb-4" />
           )}
           <p className="text-gray-700 mb-4 whitespace-pre-wrap">{job.description}</p>
+          <p className="text-sm text-gray-500 mb-4">{formatTimeAgo(job.created_at)}</p>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-semibold text-gray-800">Skill Required:</span>
@@ -226,11 +380,169 @@ const JobDetails = () => {
               <p className="text-gray-600">{job.location}</p>
             </div>
           </div>
-          {job.status && (
-            <p className="mt-4 text-sm text-gray-500">Status: {job.status}</p>
+          <p
+            className={`mt-4 text-sm font-semibold ${
+              isTaken ? 'text-red-600' : 'text-green-600'
+            }`}
+          >
+            Status: {job.status || 'Open'}
+          </p>
+
+          {acceptedApplication && (
+            <p className="mt-2 text-sm text-gray-600">
+              Accepted fundi: {acceptedApplication.name}
+            </p>
+          )}
+
+          {isOwner && job.status === 'In Progress' && (
+            <button
+              onClick={handleCompleteJob}
+              disabled={completing}
+              className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+            >
+              {completing ? 'Completing...' : 'Mark Job Completed'}
+            </button>
+          )}
+
+          {isOwner && job.status === 'Completed' && acceptedApplication && (
+            <form
+              onSubmit={handleSubmitReview}
+              className="mt-5 border-t pt-4 space-y-3"
+            >
+              <h3 className="font-semibold">Rate this fundi</h3>
+
+              <select
+                value={review.rating}
+                onChange={(e) =>
+                  setReview({ ...review, rating: e.target.value })
+                }
+                className="w-full border p-2 rounded"
+              >
+                <option value="5">5 stars</option>
+                <option value="4">4 stars</option>
+                <option value="3">3 stars</option>
+                <option value="2">2 stars</option>
+                <option value="1">1 star</option>
+              </select>
+
+              <textarea
+                value={review.comment}
+                onChange={(e) =>
+                  setReview({ ...review, comment: e.target.value })
+                }
+                placeholder="Write a short review..."
+                className="w-full border p-2 rounded"
+                rows="3"
+              />
+
+              <button
+                type="submit"
+                disabled={submittingReview}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {submittingReview ? 'Submitting...' : 'Submit Review'}
+              </button>
+            </form>
+          )}
+
+          {isOwner && acceptedApplication && (
+            <form
+              onSubmit={handleSubmitReport}
+              className="mt-5 border-t pt-4 space-y-3"
+            >
+              <h3 className="font-semibold text-red-700">Report this fundi</h3>
+              <p className="text-sm text-gray-600">
+                Use this if the fundi broke something, behaved wrongly, or did not follow the agreement.
+              </p>
+
+              <input
+                value={report.reason}
+                onChange={(e) =>
+                  setReport({ ...report, reason: e.target.value })
+                }
+                placeholder="Short reason"
+                className="w-full border p-2 rounded"
+              />
+
+              <textarea
+                value={report.details}
+                onChange={(e) =>
+                  setReport({ ...report, details: e.target.value })
+                }
+                placeholder="Explain what happened..."
+                className="w-full border p-2 rounded"
+                rows="3"
+              />
+
+              <button
+                type="submit"
+                disabled={submittingReport}
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {submittingReport ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </form>
           )}
         </div>
       )}
+      <h2 className="text-2xl font-bold mt-8 mb-4">
+    Applicants
+</h2>
+
+{applications.length === 0 ? (
+    <p>No applications yet.</p>
+) : (
+    applications.map((app) => (
+        <div
+            key={app.id}
+            className="bg-white shadow rounded p-4 mb-3"
+        >
+            <h3>{app.name}</h3>
+
+            <p>{app.skill}</p>
+
+            <p>{app.location}</p>
+
+            <p>⭐ {app.rating}</p>
+
+            <p className="text-sm text-gray-500">
+                Applied {formatTimeAgo(app.applied_at).replace('Posted ', '')}
+            </p>
+
+            <p
+                className={`text-sm font-semibold ${
+                    app.status === 'Accepted'
+                        ? 'text-green-600'
+                        : app.status === 'Rejected'
+                          ? 'text-red-600'
+                          : 'text-blue-600'
+                }`}
+            >
+                Status: {app.status}
+            </p>
+
+            <button
+                disabled={isTaken || app.status !== 'Pending' || acceptingId === app.id}
+                onClick={() => handleAccept(app.id)}
+                className={`px-4 py-2 rounded ${
+                    app.status === 'Accepted'
+                        ? 'bg-green-600 text-white'
+                        : isTaken || app.status !== 'Pending'
+                          ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                } disabled:opacity-70`}
+            >
+                {app.status === 'Accepted'
+                    ? 'Accepted'
+                    : acceptingId === app.id
+                      ? 'Accepting...'
+                      : isTaken || app.status !== 'Pending'
+                        ? 'Unavailable'
+                        : 'Accept'}
+            </button>
+        </div>
+    ))
+)}
     </div>
   );
 };

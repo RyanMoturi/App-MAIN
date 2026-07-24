@@ -1,0 +1,13 @@
+.cache/
+outputs/
+
+node_modules/
+.npm-cache/
+
+.env
+.env.*
+!.env.example
+
+*service-account*.json
+firebase-service-account*.json
+*firebase-adminsdk*.json

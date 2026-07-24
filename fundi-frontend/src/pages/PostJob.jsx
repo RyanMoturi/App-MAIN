@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 
 const PostJob = ({ onSubmit }) => {
+  const skills = [
+  "Plumbing",
+  "Electrical",
+  "Carpentry",
+];
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -48,6 +53,7 @@ const PostJob = ({ onSubmit }) => {
     if (response.ok) {
       setSuccessMessage('✅ Job posted successfully!');
       setFormVisible(false);
+      onSubmit?.();
       setFormData({
         title: '',
         description: '',
@@ -101,14 +107,21 @@ const PostJob = ({ onSubmit }) => {
             required
             className="w-full border p-2 rounded"
           />
-          <input
+            <select
             name="skillRequired"
-            placeholder="Required Skill (e.g., Plumbing)"
-            onChange={handleChange}
             value={formData.skillRequired}
+            onChange={handleChange}
             required
             className="w-full border p-2 rounded"
-          />
+          >
+            <option value="">Select Required Skill</option>
+
+            {skills.map((skill) => (
+              <option key={skill} value={skill}>
+                {skill}
+              </option>
+            ))}
+</select>
           <input
             name="location"
             placeholder="Location"

@@ -21,7 +21,7 @@ const Login = () => {
     e.preventDefault();
 
     try {
-      const response = await fetch('http://localhost:5001/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -32,15 +32,29 @@ const Login = () => {
       const data = await response.json();
 
       if (response.ok) {
+        localStorage.setItem("userId", data.user.id);
+
         // Store IDs depending on role
-        if (formData.role === 'client' && data.clientId) {
-          localStorage.setItem('clientId', data.clientId);
+        if (formData.role === "client" && data.clientId) {
+          localStorage.setItem("clientId", data.clientId);
+
+          localStorage.setItem("name", data.user.name);
+          localStorage.setItem("email", data.user.email);
+          localStorage.setItem("location", data.user.location);
         }
 
-        if (formData.role === 'fundi' && data.fundiId) {
-          localStorage.setItem('fundiId', data.fundiId);
-        }
+        if (formData.role === "fundi" && data.fundiId) {
+          localStorage.setItem("fundiId", data.fundiId);
 
+          localStorage.setItem("name", data.user.name);
+          localStorage.setItem("email", data.user.email);
+          localStorage.setItem("location", data.user.location);
+          localStorage.setItem("skill", data.user.skill);
+          localStorage.setItem("bio", data.user.bio);
+          localStorage.setItem("rating", data.user.rating);
+          localStorage.setItem("is_verified", data.user.is_verified ? "1" : "0");
+          localStorage.setItem("verification_status", data.user.verification_status || "Pending");
+        }
         if (formData.role === 'admin' && data.adminId) {
           localStorage.setItem('adminId', data.adminId);
         }

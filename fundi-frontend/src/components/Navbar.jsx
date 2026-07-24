@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { CloseIcon, MenuIcon, ShieldIcon, ToolIcon, UserIcon } from './Icons';
 
 const Navbar = () => {
   const [role, setRole] = useState(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -47,27 +49,106 @@ const Navbar = () => {
     navigate('/login');
   };
 
+  const closeMenu = () => setOpen(false);
+
+  const navLinkClass =
+    'flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-black transition';
+
   return (
-    <nav className="bg-black text-white flex flex-wrap items-center justify-between px-6 py-4">
-      <Link to="/" className="text-xl font-bold mr-8">Fundi-Link</Link>
-      <div className="flex flex-wrap gap-4 items-center">
-        <Link to="/" className="hover:text-yellow-400 transition">Home</Link>
-        {/* Show the correct dashboard link for the logged-in role; keep visible for clients when logged in */}
-        {role === 'client' && loggedIn && (
-          <Link to="/client-dashboard" className="hover:text-yellow-400 transition">Client Dashboard</Link>
-        )}
-        {role === 'fundi' && loggedIn && (
-          <Link to="/fundi-dashboard" className="hover:text-yellow-400 transition">Fundi Dashboard</Link>
-        )}
-         {/* Only fundis see Job List */}
-         {role === 'fundi' && <Link to="/jobs" className="hover:text-yellow-400 transition">Job List</Link>}
-        {/* Profile link for any logged-in user */}
-        {loggedIn && <Link to="/profile" className="hover:text-yellow-400 transition">Profile</Link>}
-        {/* Auth links hidden when logged in */}
-        {!loggedIn && <Link to="/login" className="hover:text-yellow-400 transition">Login</Link>}
-        {!loggedIn && <Link to="/signup" className="hover:text-yellow-400 transition">Signup</Link>}
-        {loggedIn && <button onClick={handleLogout} className="hover:text-yellow-400 transition bg-transparent border-none cursor-pointer">Logout</button>}
+    <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <Link
+          to="/"
+          onClick={closeMenu}
+          className="flex items-center gap-3 text-xl font-bold text-gray-950"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded bg-black text-white">
+            <ToolIcon className="h-5 w-5" />
+          </span>
+          Fundi-Link
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="inline-flex items-center justify-center rounded border border-gray-300 p-2 text-gray-800 hover:bg-gray-100 md:hidden"
+          aria-label="Toggle navigation menu"
+        >
+          {open ? <CloseIcon /> : <MenuIcon />}
+        </button>
+
+        <div className="hidden items-center gap-2 md:flex">
+          <Link to="/" className={navLinkClass}>
+            <ToolIcon className="h-4 w-4" />
+            Home
+          </Link>
+          {role === 'client' && loggedIn && (
+            <Link to="/client-dashboard" className={navLinkClass}>
+              <UserIcon className="h-4 w-4" />
+              Client Dashboard
+            </Link>
+          )}
+          {role === 'fundi' && loggedIn && (
+            <Link to="/fundi-dashboard" className={navLinkClass}>
+              <ShieldIcon className="h-4 w-4" />
+              Fundi Dashboard
+            </Link>
+          )}
+          {!loggedIn && <Link to="/login" className={navLinkClass}>Login</Link>}
+          {!loggedIn && (
+            <Link
+              to="/signup"
+              className="rounded bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition"
+            >
+              Sign up
+            </Link>
+          )}
+          {loggedIn && (
+            <button
+              onClick={handleLogout}
+              className="rounded bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition"
+            >
+              Logout
+            </button>
+          )}
+        </div>
       </div>
+
+      {open && (
+        <div className="border-t border-gray-200 bg-white px-6 py-4 md:hidden">
+          <div className="flex flex-col gap-2">
+            <Link to="/" onClick={closeMenu} className={navLinkClass}>
+              <ToolIcon className="h-4 w-4" />
+              Home
+            </Link>
+            {role === 'client' && loggedIn && (
+              <Link to="/client-dashboard" onClick={closeMenu} className={navLinkClass}>
+                <UserIcon className="h-4 w-4" />
+                Client Dashboard
+              </Link>
+            )}
+            {role === 'fundi' && loggedIn && (
+              <Link to="/fundi-dashboard" onClick={closeMenu} className={navLinkClass}>
+                <ShieldIcon className="h-4 w-4" />
+                Fundi Dashboard
+              </Link>
+            )}
+            {!loggedIn && <Link to="/login" onClick={closeMenu} className={navLinkClass}>Login</Link>}
+            {!loggedIn && <Link to="/signup" onClick={closeMenu} className={navLinkClass}>Sign up</Link>}
+            {loggedIn && (
+              <button
+                onClick={() => {
+                  closeMenu();
+                  handleLogout();
+                }}
+                className="flex items-center rounded px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Logout
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

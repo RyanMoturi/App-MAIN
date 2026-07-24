@@ -1,187 +1,837 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import PostJob from './PostJob';
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import PostJob from "./PostJob";
+import { formatTimeAgo } from "../utils/timeAgo";
+import MessagesPanel from "../components/MessagesPanel";
+import FundiProfile from "../components/FundiProfile";
+import { MenuIcon } from "../components/Icons";
 
-const TABS = ['My Jobs', 'Find Fundis', 'Messages', 'Notifications', 'Profile'];
-
-const mockFundis = [
-  { id: 1, name: 'Jane Mwangi', skill: 'Plumbing', rating: 4.9, location: 'Nairobi' },
-  { id: 2, name: 'Mary Wanjiku', skill: 'Painting', rating: 4.7, location: 'Kisumu' }
-];
-const mockMessages = [
-  { id: 1, from: 'Jane Mwangi', content: 'I can start tomorrow!', job: 'Fix Sink' },
-  { id: 2, from: 'Mary Wanjiku', content: 'Do you have a color preference?', job: 'Paint Living Room' }
-];
-const mockNotifications = [
-  { id: 1, content: 'Jane Mwangi applied for your job: Fix Sink' },
-  { id: 2, content: 'Mary Wanjiku was accepted for your job: Paint Living Room' }
+const TABS = [
+  "My Jobs",
+  "Find Fundis",
+  "Messages",
+  "Notifications",
+  "Profile",
 ];
 
 const ClientDashboard = () => {
-  const [activeTab, setActiveTab] = useState(TABS[0]);
-  const [jobs, setJobs] = useState([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
-  const [jobsError, setJobsError] = useState(null);
-  const [showPostJob, setShowPostJob] = useState(false);
-  const [fundis] = useState(mockFundis);
-  const [messages] = useState(mockMessages);
-  const [notifications] = useState(mockNotifications);
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState("My Jobs");
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+
+  // Jobs
+  const [jobs, setJobs] = useState([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [jobsError, setJobsError] = useState("");
+  const [showPostJob, setShowPostJob] = useState(false);
+
+  // Fundis
+  const [fundis, setFundis] = useState([]);
+  const [loadingFundis, setLoadingFundis] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [location, setLocation] = useState("");
+  const [selectedFundiId, setSelectedFundiId] = useState(null);
+  const [contactFundi, setContactFundi] = useState(null);
+  const [pendingChat, setPendingChat] = useState(null);
+
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Profile
+  const [clientProfile, setClientProfile] = useState({
+    name: "",
+    email: "",
+    phone_number: "",
+    location: "",
+    profile_photo: "",
+  });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [newProfilePhoto, setNewProfilePhoto] = useState(null);
+
   useEffect(() => {
-    const role = localStorage.getItem('role');
-    if (role !== 'client') {
-      navigate('/login');
+    const role = localStorage.getItem("role");
+
+    if (role !== "client") {
+      navigate("/login");
     }
   }, [navigate]);
 
-  // Fetch jobs posted by this client
   const fetchJobs = async () => {
     setLoadingJobs(true);
-    setJobsError(null);
+    setJobsError("");
+
     try {
-      const clientId = localStorage.getItem('clientId');
-      const token = localStorage.getItem('token');
+      const clientId = localStorage.getItem("clientId");
+      const token = localStorage.getItem("token");
+
       const res = await fetch(`/api/client/${clientId}/jobs`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-      if (!res.ok) throw new Error('Failed to fetch jobs');
+
+      if (!res.ok) throw new Error("Failed");
+
       const data = await res.json();
+
       setJobs(data);
     } catch (err) {
-      setJobsError('Failed to load jobs');
+      setJobsError("Failed to load jobs.");
+      console.log(err);
+    }
+
+    setLoadingJobs(false);
+  };
+
+  const fetchFundis = async (
+    category = "All",
+    searchLocation = ""
+  ) => {
+    setLoadingFundis(true);
+
+    try {
+      let url = "/api/fundi";
+
+      const params = new URLSearchParams();
+
+      if (category !== "All") {
+        params.append("category", category);
+      }
+
+      if (searchLocation.trim() !== "") {
+        params.append("location", searchLocation);
+      }
+
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+
+      const res = await fetch(url);
+
+      if (!res.ok) throw new Error("Failed");
+
+      const data = await res.json();
+
+      setFundis(data);
+    } catch (err) {
+      console.log(err);
+    }
+
+    setLoadingFundis(false);
+  };
+
+  const fetchNotifications = async () => {
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId) return;
+
+    setLoadingNotifications(true);
+
+    try {
+      const res = await fetch(
+        `/api/notifications?userId=${clientId}&userRole=client`
+      );
+      if (res.ok) {
+        setNotifications(await res.json());
+      }
+    } catch (err) {
+      console.log(err);
     } finally {
-      setLoadingJobs(false);
+      setLoadingNotifications(false);
+    }
+  };
+
+  const markNotificationRead = async (notificationId) => {
+    const clientId = localStorage.getItem("clientId");
+
+    await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notificationId,
+        userId: clientId,
+        userRole: "client",
+      }),
+    });
+
+    fetchNotifications();
+  };
+
+  const fetchClientProfile = async () => {
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId) return;
+
+    try {
+      const res = await fetch(`/api/client/${clientId}/profile`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientProfile({
+          name: data.name || "",
+          email: data.email || "",
+          phone_number: data.phone_number || "",
+          location: data.location || "",
+          profile_photo: data.profile_photo || "",
+        });
+      }
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const saveClientProfile = async () => {
+    const clientId = localStorage.getItem("clientId");
+    const formData = new FormData();
+
+    formData.append("name", clientProfile.name);
+    formData.append("email", clientProfile.email);
+    formData.append("phone_number", clientProfile.phone_number || "");
+    formData.append("location", clientProfile.location || "");
+
+    if (newProfilePhoto) {
+      formData.append("profile_photo", newProfilePhoto);
+    }
+
+    setSavingProfile(true);
+
+    try {
+      const res = await fetch(`/api/client/${clientId}/profile`, {
+        method: "PUT",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Failed to save profile");
+
+      localStorage.setItem("name", clientProfile.name);
+      localStorage.setItem("email", clientProfile.email);
+      localStorage.setItem("location", clientProfile.location);
+
+      alert(data.message);
+      setEditingProfile(false);
+      setNewProfilePhoto(null);
+      fetchClientProfile();
+    } catch (err) {
+      alert(err.message || "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'My Jobs') fetchJobs();
+    if (activeTab === "My Jobs") {
+      fetchJobs();
+    }
+
+    if (activeTab === "Find Fundis") {
+      fetchFundis(selectedCategory, location);
+    }
+
+    if (activeTab === "Notifications") {
+      fetchNotifications();
+    }
+
+    if (activeTab === "Profile") {
+      fetchClientProfile();
+    }
   }, [activeTab]);
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-3xl font-bold mb-4">Client Dashboard</h1>
-      <div className="flex gap-4 mb-6">
-        {TABS.map(tab => (
-          <button
-            key={tab}
-            className={`px-4 py-2 rounded ${activeTab === tab ? 'bg-black text-white' : 'bg-white text-black border'}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab}
-          </button>
-        ))}
+    <div className="min-h-screen bg-gray-100 p-6">
+
+      <h1 className="text-3xl font-bold mb-6">
+        Client Dashboard
+      </h1>
+
+      <div className="relative mb-8 max-w-xs">
+        <button
+          type="button"
+          onClick={() => setPageMenuOpen(!pageMenuOpen)}
+          className="flex w-full items-center justify-between rounded bg-white px-4 py-3 font-semibold shadow border hover:bg-gray-50"
+        >
+          <span>{activeTab}</span>
+          <MenuIcon className="h-5 w-5" />
+        </button>
+
+        {pageMenuOpen && (
+          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded border bg-white shadow-lg">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab);
+                  setPageMenuOpen(false);
+                }}
+                className={`block w-full px-4 py-3 text-left text-sm font-medium hover:bg-gray-100 ${
+                  activeTab === tab ? "bg-gray-100 text-black" : "text-gray-700"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {/* Tab Content */}
-      {activeTab === 'My Jobs' && (
+
+      {activeTab === "My Jobs" && (
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">My Jobs</h2>
+
+          <div className="flex justify-between items-center mb-6">
+
+            <h2 className="text-2xl font-semibold">
+              My Jobs
+            </h2>
+
             <button
+              onClick={() =>
+                setShowPostJob(!showPostJob)
+              }
               className="bg-blue-600 text-white px-4 py-2 rounded"
-              onClick={() => setShowPostJob(v => !v)}
             >
-              {showPostJob ? 'Cancel' : 'Post a Job'}
+              {showPostJob
+                ? "Cancel"
+                : "Post Job"}
+            </button>
+
+          </div>
+
+          {showPostJob && (
+            <PostJob onSubmit={fetchJobs} />
+          )}
+
+          {loadingJobs ? (
+            <div>Loading jobs...</div>
+          ) : jobsError ? (
+            <div className="text-red-600">
+              {jobsError}
+            </div>
+          ) : jobs.length === 0 ? (
+            <div>No jobs posted.</div>
+          ) : (
+            <div className="space-y-4">
+
+              {jobs.map((job) => (
+
+                <Link
+                  key={job.id}
+                  to={`/jobs/${job.id}`}
+                  className="block bg-white rounded-lg shadow p-5 hover:shadow-lg"
+                >
+
+                  <div className="flex justify-between">
+
+                    <div>
+
+                      <h3 className="text-xl font-bold">
+                        {job.title}
+                      </h3>
+
+                      <p className="text-gray-600">
+                        {job.description}
+                      </p>
+
+                      <p className="text-sm text-gray-500 mt-2">
+                        {formatTimeAgo(job.created_at)}
+                      </p>
+
+                      <p
+                        className={`font-semibold mt-2 ${
+                          job.is_taken ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
+                        Status:
+                        {" "}
+                        {job.status || "Open"}
+                      </p>
+
+                    </div>
+
+                    <span className="text-blue-600">
+                      View →
+                    </span>
+
+                  </div>
+
+                  {job.image_url && (
+                    <img
+                      src={job.image_url}
+                      alt={job.title}
+                      className="mt-4 rounded w-full h-48 object-cover"
+                    />
+                  )}
+
+                </Link>
+
+              ))}
+
+            </div>
+          )}
+
+        </div>
+      )}
+            {activeTab === "Find Fundis" && (
+        <div>
+
+          <h2 className="text-2xl font-semibold mb-6">
+            Find Fundis
+          </h2>
+
+          {/* Search Filters */}
+
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4">
+
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="border rounded px-4 py-2"
+            >
+              <option value="All">All Categories</option>
+              <option value="Plumbing">Plumbing</option>
+              <option value="Electrical">Electrical</option>
+              <option value="Carpentry">Carpentry</option>
+              <option value="Painting">Painting</option>
+              <option value="Cleaning">Cleaning</option>
+              <option value="Roofing">Roofing</option>
+              <option value="Welding">Welding</option>
+              <option value="Masonry">Masonry</option>
+            </select>
+
+            <input
+              type="text"
+              placeholder="Search by location..."
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="border rounded px-4 py-2 flex-1"
+            />
+
+            <button
+              onClick={() =>
+                fetchFundis(
+                  selectedCategory,
+                  location
+                )
+              }
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded"
+            >
+              Search
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedCategory("All");
+                setLocation("");
+                fetchFundis("All", "");
+              }}
+              className="bg-gray-300 hover:bg-gray-400 px-5 py-2 rounded"
+            >
+              Clear
+            </button>
+
+          </div>
+
+          {loadingFundis ? (
+
+            <div className="text-center py-10">
+              Loading fundis...
+            </div>
+
+          ) : fundis.length === 0 ? (
+
+            <div className="text-center text-gray-500 py-10">
+              No fundis found.
+            </div>
+
+          ) : (
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+              {fundis.map((fundi) => (
+
+                <div
+                  key={fundi.id}
+                  className="bg-white rounded-lg shadow hover:shadow-lg transition p-5"
+                >
+
+                  <div className="flex justify-between items-start">
+
+                    <div>
+
+                      <h3 className="text-xl font-bold">
+                        {fundi.name}
+                      </h3>
+
+                      <p className="text-blue-600 font-semibold">
+                        {fundi.skill}
+                      </p>
+
+                    </div>
+
+                    <span className="text-yellow-500 font-semibold">
+                      ⭐ {fundi.rating || "0.0"}
+                    </span>
+
+                  </div>
+
+                  <p className="text-gray-500 mt-3">
+                    📍 {fundi.location}
+                  </p>
+
+                  <p className="text-gray-600 mt-3">
+                    {fundi.bio || "No bio available."}
+                  </p>
+
+                  <div className="flex gap-3 mt-6">
+
+                    <button
+                      onClick={() => setSelectedFundiId(fundi.id)}
+                      className="flex-1 bg-black text-white py-2 rounded hover:bg-gray-800"
+                    >
+                      View Profile
+                    </button>
+
+                    <button
+                      onClick={() => setContactFundi(fundi)}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                    >
+                      Contact
+                    </button>
+
+                  </div>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
+      )}
+            {/* ===================== MESSAGES ===================== */}
+
+      {activeTab === "Messages" && (
+        <div>
+
+          <h2 className="text-2xl font-semibold mb-6">
+            Messages
+          </h2>
+
+          <MessagesPanel
+            clientJobs={jobs}
+            pendingChat={pendingChat}
+            onChatStarted={() => setPendingChat(null)}
+          />
+
+        </div>
+      )}
+
+      {/* ===================== NOTIFICATIONS ===================== */}
+
+      {activeTab === "Notifications" && (
+        <div>
+
+          <h2 className="text-2xl font-semibold mb-6">
+            Notifications
+          </h2>
+
+          {loadingNotifications ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+              Loading notifications...
+            </div>
+          ) : notifications.length === 0 ? (
+
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+              No notifications.
+            </div>
+
+          ) : (
+
+            <div className="space-y-4">
+
+              {notifications.map((notification) => (
+
+                <div
+                  key={notification.id}
+                  className="bg-white rounded-lg shadow p-5 flex justify-between items-center"
+                >
+
+                  <div>
+
+                    <p className="font-medium">
+                      {notification.content}
+                    </p>
+
+                    {notification.created_at && (
+                      <p className="text-sm text-gray-500 mt-1">
+                        {notification.created_at}
+                      </p>
+                    )}
+
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {!notification.is_read && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        New
+                      </span>
+                    )}
+
+                    {!notification.is_read && (
+                      <button
+                        onClick={() => markNotificationRead(notification.id)}
+                        className="text-sm text-blue-600 hover:underline"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </div>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+        </div>
+      )}
+            {/* ===================== PROFILE ===================== */}
+
+      {activeTab === "Profile" && (
+        <div>
+
+          <h2 className="text-2xl font-semibold mb-6">
+            My Profile
+          </h2>
+
+          <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+
+            <div className="mb-5 flex items-center gap-4">
+              <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200">
+                {newProfilePhoto || clientProfile.profile_photo ? (
+                  <img
+                    src={
+                      newProfilePhoto
+                        ? URL.createObjectURL(newProfilePhoto)
+                        : clientProfile.profile_photo
+                    }
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : null}
+              </div>
+
+              {editingProfile && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewProfilePhoto(e.target.files[0])}
+                />
+              )}
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Name
+              </label>
+
+              <input
+                type="text"
+                value={clientProfile.name}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({ ...clientProfile, name: e.target.value })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Email
+              </label>
+
+              <input
+                type="email"
+                value={clientProfile.email}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({ ...clientProfile, email: e.target.value })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Phone Number
+              </label>
+
+              <input
+                type="text"
+                value={clientProfile.phone_number}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({
+                    ...clientProfile,
+                    phone_number: e.target.value,
+                  })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Location
+              </label>
+
+              <input
+                type="text"
+                value={clientProfile.location}
+                readOnly={!editingProfile}
+                onChange={(e) =>
+                  setClientProfile({
+                    ...clientProfile,
+                    location: e.target.value,
+                  })
+                }
+                className={`w-full border rounded px-4 py-2 ${
+                  editingProfile ? "bg-white" : "bg-gray-100"
+                }`}
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Role
+              </label>
+
+              <input
+                type="text"
+                value="Client"
+                readOnly
+                className="w-full border rounded px-4 py-2 bg-gray-100"
+              />
+            </div>
+
+            <div className="flex gap-3">
+
+              {editingProfile ? (
+                <>
+                  <button
+                    onClick={saveClientProfile}
+                    disabled={savingProfile}
+                    className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {savingProfile ? "Saving..." : "Save Profile"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setEditingProfile(false);
+                      setNewProfilePhoto(null);
+                      fetchClientProfile();
+                    }}
+                    className="bg-gray-300 px-5 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setEditingProfile(true)}
+                  className="bg-black text-white px-5 py-2 rounded hover:bg-gray-800"
+                >
+                  Edit Profile
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  navigate("/login");
+                }}
+                className="bg-red-600 text-white px-5 py-2 rounded hover:bg-red-700"
+              >
+                Logout
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {selectedFundiId && (
+        <FundiProfile
+          fundiId={selectedFundiId}
+          onClose={() => setSelectedFundiId(null)}
+          onMessage={(fundi) => {
+            setSelectedFundiId(null);
+            setPendingChat({
+              otherUserId: fundi.id,
+              otherUserRole: "fundi",
+              otherUserName: fundi.name,
+            });
+            setActiveTab("Messages");
+          }}
+        />
+      )}
+
+      {contactFundi && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Contact {contactFundi.name}</h2>
+              <button
+                onClick={() => setContactFundi(null)}
+                className="text-gray-500 hover:text-gray-800 text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="font-semibold">Email:</span>{" "}
+                {contactFundi.email || "Not provided"}
+              </p>
+              <p>
+                <span className="font-semibold">Phone:</span>{" "}
+                {contactFundi.phone_number || "Not provided"}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setPendingChat({
+                  otherUserId: contactFundi.id,
+                  otherUserRole: "fundi",
+                  otherUserName: contactFundi.name,
+                });
+                setContactFundi(null);
+                setActiveTab("Messages");
+              }}
+              className="mt-5 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            >
+              Open Messages
             </button>
           </div>
-          {showPostJob && <PostJob onSubmit={fetchJobs} />}
-          {loadingJobs ? (
-            <div className="text-center py-12">Loading jobs...</div>
-          ) : jobsError ? (
-            <div className="text-center text-red-600 py-12">{jobsError}</div>
-          ) : jobs.length === 0 ? (
-            <div className="text-center text-gray-500">No jobs posted yet.</div>
-          ) : (
-            <ul className="space-y-4">
-              {jobs.map(job => (
-                <li key={job.id}>
-                  <Link
-                    to={`/jobs/${job.id}`}
-                    className="block bg-white rounded shadow p-4 hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="font-bold">{job.title}</span>
-                        {job.status && (
-                          <span className="ml-2 text-sm text-gray-500">[{job.status}]</span>
-                        )}
-                      </div>
-                      <span className="text-sm text-blue-600">View / Edit &rarr;</span>
-                    </div>
-                    {job.image_url && (
-                      <img src={job.image_url} alt="Job" className="w-full h-48 object-cover rounded mb-2 mt-2" />
-                    )}
-                    {job.description && (
-                      <p className="text-gray-600 text-sm mt-2 line-clamp-2">{job.description}</p>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
-      {activeTab === 'Find Fundis' && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Find Fundis</h2>
-          <ul className="space-y-4">
-            {fundis.map(fundi => (
-              <li key={fundi.id} className="bg-white rounded shadow p-4 flex justify-between items-center">
-                <div>
-                  <span className="font-bold">{fundi.name}</span> - {fundi.skill} <span className="ml-2 text-yellow-500">⭐ {fundi.rating}</span>
-                  <div className="text-sm text-gray-500">{fundi.location}</div>
-                </div>
-                <button className="bg-blue-600 text-white px-2 py-1 rounded">View Profile</button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {activeTab === 'Messages' && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Messages</h2>
-          <ul className="space-y-4">
-            {messages.map(msg => (
-              <li key={msg.id} className="bg-white rounded shadow p-4">
-                <div className="font-bold">From: {msg.from}</div>
-                <div className="text-gray-700">{msg.content}</div>
-                <div className="text-sm text-gray-500">Regarding: {msg.job}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {activeTab === 'Notifications' && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Notifications</h2>
-          <ul className="space-y-2">
-            {notifications.map(note => (
-              <li key={note.id} className="bg-white rounded shadow p-3">{note.content}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {activeTab === 'Profile' && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">My Profile</h2>
-          <div className="bg-white rounded shadow p-6">
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-bold mb-2">Name</label>
-              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" value="John Doe" readOnly />
-            </div>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-bold mb-2">Email</label>
-              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="email" value="john@example.com" readOnly />
-            </div>
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-bold mb-2">Role</label>
-              <input className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" value="Client" readOnly />
-            </div>
-            <button className="bg-black hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled>Edit Profile</button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

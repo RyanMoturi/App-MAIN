@@ -4,18 +4,21 @@ import StarRating from './StarRating';
 const FundiProfile = ({ fundiId, onClose, onMessage }) => {
   const [fundi, setFundi] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const [fundiRes, reviewsRes] = await Promise.all([
-          fetch(`/api/fundis/${fundiId}`),
+        const [fundiRes, reviewsRes, completedJobsRes] = await Promise.all([
+          fetch(`/api/fundi/${fundiId}`),
           fetch(`/api/fundi/${fundiId}/reviews`),
+          fetch(`/api/fundi/${fundiId}/completed-jobs`),
         ]);
         if (fundiRes.ok) setFundi(await fundiRes.json());
         if (reviewsRes.ok) setReviews(await reviewsRes.json());
+        if (completedJobsRes.ok) setCompletedJobs(await completedJobsRes.json());
       } finally {
         setLoading(false);
       }
@@ -53,6 +56,33 @@ const FundiProfile = ({ fundiId, onClose, onMessage }) => {
             >
               Send Message
             </button>
+
+            <div className="mt-6">
+              <h4 className="font-semibold mb-3">Portfolio</h4>
+              {completedJobs.length === 0 ? (
+                <p className="text-gray-500 text-sm">No completed jobs yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {completedJobs.map((job) => (
+                    <li key={job.id} className="bg-gray-50 rounded p-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">{job.title}</span>
+                        <StarRating value={Number(job.rating) || 0} readOnly size="sm" />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Completed{" "}
+                        {job.completed_at
+                          ? new Date(job.completed_at).toLocaleDateString()
+                          : "date not recorded"}
+                      </p>
+                      <p className="text-sm text-gray-700 mt-1">
+                        {job.comment || "No review left yet."}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <div className="mt-6">
               <h4 className="font-semibold mb-3">Reviews</h4>

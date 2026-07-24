@@ -4,6 +4,7 @@ import PostJob from "./PostJob";
 import { formatTimeAgo } from "../utils/timeAgo";
 import MessagesPanel from "../components/MessagesPanel";
 import FundiProfile from "../components/FundiProfile";
+import { MenuIcon } from "../components/Icons";
 
 const TABS = [
   "My Jobs",
@@ -17,6 +18,7 @@ const ClientDashboard = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("My Jobs");
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
 
   // Jobs
   const [jobs, setJobs] = useState([]);
@@ -242,21 +244,35 @@ const ClientDashboard = () => {
         Client Dashboard
       </h1>
 
-      <div className="mb-8 max-w-xs">
-        <label className="block text-sm font-semibold mb-2">
-          Dashboard Page
-        </label>
-        <select
-          value={activeTab}
-          onChange={(e) => setActiveTab(e.target.value)}
-          className="w-full bg-white border rounded px-4 py-2"
+      <div className="relative mb-8 max-w-xs">
+        <button
+          type="button"
+          onClick={() => setPageMenuOpen(!pageMenuOpen)}
+          className="flex w-full items-center justify-between rounded bg-white px-4 py-3 font-semibold shadow border hover:bg-gray-50"
         >
-          {TABS.map((tab) => (
-            <option key={tab} value={tab}>
-              {tab}
-            </option>
-          ))}
-        </select>
+          <span>{activeTab}</span>
+          <MenuIcon className="h-5 w-5" />
+        </button>
+
+        {pageMenuOpen && (
+          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded border bg-white shadow-lg">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab);
+                  setPageMenuOpen(false);
+                }}
+                className={`block w-full px-4 py-3 text-left text-sm font-medium hover:bg-gray-100 ${
+                  activeTab === tab ? "bg-gray-100 text-black" : "text-gray-700"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {activeTab === "My Jobs" && (

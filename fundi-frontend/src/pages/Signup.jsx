@@ -48,7 +48,7 @@ const Signup = () => {
       // ================= CLIENT SIGNUP =================
       if (role === "client") {
         response = await fetch(
-          "http://localhost:5001/api/auth/signup/client",
+          "/api/auth/signup/client",
           {
             method: "POST",
             headers: {
@@ -100,7 +100,7 @@ const Signup = () => {
         }
 
         response = await fetch(
-          "http://localhost:5001/api/auth/signup/fundi",
+          "/api/auth/signup/fundi",
           {
             method: "POST",
             body: data,

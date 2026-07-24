@@ -1,240 +1,158 @@
 const express = require("express");
 const multer = require("multer");
-const db = require("../db");
+const {
+  COLLECTIONS,
+  all,
+  getById,
+  sortByDateDesc,
+  toDataUrl,
+  updateById,
+} = require("../firestoreStore");
+const { uploadFile } = require("../storageStore");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-const toDataUrl = (buffer, mimeType = "image/jpeg") => {
-  if (!buffer) return null;
-  return `data:${mimeType};base64,${buffer.toString("base64")}`;
-};
+const publicFundi = (fundi) => ({
+  id: fundi.id,
+  name: fundi.name,
+  email: fundi.email,
+  skill: fundi.skill,
+  bio: fundi.bio,
+  location: fundi.location,
+  rating: fundi.rating,
+  phone_number: fundi.phone_number,
+  created_at: fundi.created_at,
+});
 
-// ================= GET ALL FUNDIS =================
+const matches = (value, search) =>
+  String(value || "").toLowerCase().includes(String(search || "").toLowerCase());
+
 router.get("/", async (req, res) => {
-
   try {
     const { category, skill, location } = req.query;
-    const params = [];
-    let where = "WHERE 1=1";
+    let fundis = await all(COLLECTIONS.fundis);
 
     if (category && category !== "All") {
-      where += " AND skill = ?";
-      params.push(category);
+      fundis = fundis.filter((fundi) => fundi.skill === category);
     }
 
     if (skill) {
-      where += " AND skill LIKE ?";
-      params.push(`%${skill}%`);
+      fundis = fundis.filter((fundi) => matches(fundi.skill, skill));
     }
 
     if (location) {
-      where += " AND location LIKE ?";
-      params.push(`%${location}%`);
+      fundis = fundis.filter((fundi) => matches(fundi.location, location));
     }
 
-    const [fundis] = await db.query(`
-      SELECT
-        id,
-        name,
-        email,
-        skill,
-        bio,
-        location,
-        rating,
-        phone_number,
-        created_at
-      FROM fundis
-      ${where}
-      ORDER BY rating DESC
-    `, params);
-
-    res.json(fundis);
-
+    fundis.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+    res.json(fundis.map(publicFundi));
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to load fundis",
-    });
-
+    res.status(500).json({ error: "Failed to load fundis" });
   }
-
 });
 
-
-// ================= SEARCH FUNDIS =================
 router.get("/search/:search", async (req, res) => {
-
-  const search = `%${req.params.search}%`;
-
   try {
+    const search = req.params.search;
+    const fundis = (await all(COLLECTIONS.fundis))
+      .filter(
+        (fundi) =>
+          matches(fundi.name, search) ||
+          matches(fundi.skill, search) ||
+          matches(fundi.email, search) ||
+          matches(fundi.location, search)
+      )
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
 
-    const [fundis] = await db.query(
-      `SELECT
-        id,
-        name,
-        email,
-        skill,
-        bio,
-        location,
-        rating,
-        phone_number,
-        created_at
-      FROM fundis
-      WHERE
-          name LIKE ?
-       OR skill LIKE ?
-       OR email LIKE ?
-       OR location LIKE ?
-      ORDER BY rating DESC`,
-      [search, search, search, search]
-    );
-
-    res.json(fundis);
-
+    res.json(fundis.map(publicFundi));
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Search failed",
-    });
-
+    res.status(500).json({ error: "Search failed" });
   }
-
 });
 
-
-// ================= SEARCH BY CATEGORY =================
 router.get("/category/:skill", async (req, res) => {
-
   try {
+    const fundis = (await all(COLLECTIONS.fundis))
+      .filter((fundi) => fundi.skill === req.params.skill)
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
 
-    const [fundis] = await db.query(
-      `SELECT
-        id,
-        name,
-        email,
-        skill,
-        bio,
-        location,
-        rating,
-        phone_number
-      FROM fundis
-      WHERE skill = ?
-      ORDER BY rating DESC`,
-      [req.params.skill]
-    );
-
-    res.json(fundis);
-
+    res.json(fundis.map(publicFundi));
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to fetch category",
-    });
-
+    res.status(500).json({ error: "Failed to fetch category" });
   }
-
 });
 
-
-// ================= GET ONE FUNDI =================
 router.get("/:id/completed-jobs", async (req, res) => {
   try {
-    const [jobs] = await db.query(
-      `SELECT
-        j.id,
-        j.title,
-        j.description,
-        j.location,
-        j.skill_required,
-        j.image_url,
-        j.created_at,
-        ja.assigned_at,
-        ja.completed_at,
-        r.rating,
-        r.comment
-       FROM job_assignments ja
-       JOIN jobs j ON j.id = ja.job_id
-       LEFT JOIN reviews r ON r.job_id = j.id AND r.fundi_id = ja.fundi_id
-       WHERE ja.fundi_id = ? AND ja.completed_at IS NOT NULL
-       ORDER BY ja.completed_at DESC`,
-      [req.params.id]
-    );
+    const [assignments, jobs, reviews] = await Promise.all([
+      all(COLLECTIONS.jobAssignments),
+      all(COLLECTIONS.jobs),
+      all(COLLECTIONS.reviews),
+    ]);
 
-    res.json(jobs);
+    const jobById = new Map(jobs.map((job) => [String(job.id), job]));
+
+    const completed = assignments
+      .filter(
+        (assignment) =>
+          String(assignment.fundi_id) === String(req.params.id) &&
+          assignment.completed_at
+      )
+      .map((assignment) => {
+        const job = jobById.get(String(assignment.job_id));
+        const review = reviews.find(
+          (item) =>
+            String(item.job_id) === String(assignment.job_id) &&
+            String(item.fundi_id) === String(assignment.fundi_id)
+        );
+
+        return {
+          id: job?.id,
+          title: job?.title,
+          description: job?.description,
+          location: job?.location,
+          skill_required: job?.skill_required,
+          image_url: job?.image_url,
+          created_at: job?.created_at,
+          assigned_at: assignment.assigned_at,
+          completed_at: assignment.completed_at,
+          rating: review?.rating || null,
+          comment: review?.comment || null,
+        };
+      });
+
+    res.json(sortByDateDesc(completed, "completed_at"));
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      error: "Failed to fetch completed jobs",
-    });
+    res.status(500).json({ error: "Failed to fetch completed jobs" });
   }
 });
 
 router.get("/:id", async (req, res) => {
-
   try {
+    const fundi = await getById(COLLECTIONS.fundis, req.params.id);
 
-    const [rows] = await db.query(
-      `SELECT
-        id,
-        name,
-        email,
-        skill,
-        bio,
-        location,
-        phone_number,
-        national_id,
-        is_verified,
-        verification_status,
-        verification_note,
-        rating,
-        profile_photo,
-        good_conduct_certificate,
-        professional_certificates,
-        created_at
-      FROM fundis
-      WHERE id=?`,
-      [req.params.id]
-    );
-
-    if (!rows.length) {
-      return res.status(404).json({
-        error: "Fundi not found",
-      });
+    if (!fundi) {
+      return res.status(404).json({ error: "Fundi not found" });
     }
 
+    const { password_hash, id_photo, ...safeFundi } = fundi;
     res.json({
-      ...rows[0],
-      profile_photo: toDataUrl(rows[0].profile_photo),
-      good_conduct_certificate: toDataUrl(
-        rows[0].good_conduct_certificate,
-        "application/octet-stream"
-      ),
-      professional_certificates: toDataUrl(
-        rows[0].professional_certificates,
-        "application/octet-stream"
-      ),
+      ...safeFundi,
+      profile_photo: toDataUrl(fundi.profile_photo),
+      good_conduct_certificate: toDataUrl(fundi.good_conduct_certificate, "application/octet-stream"),
+      professional_certificates: toDataUrl(fundi.professional_certificates, "application/octet-stream"),
     });
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
-
+    res.status(500).json({ error: "Server error" });
   }
-
 });
 
-// ================= UPDATE ONE FUNDI =================
 router.put(
   "/:id",
   upload.fields([
@@ -243,63 +161,48 @@ router.put(
     { name: "professional_certificates", maxCount: 1 },
   ]),
   async (req, res) => {
-  try {
-    const { name, email, location, skill, bio, phone_number } = req.body;
+    try {
+      const { name, email, location, skill, bio, phone_number } = req.body;
+      const fundi = await getById(COLLECTIONS.fundis, req.params.id);
 
-    const [existing] = await db.query("SELECT id FROM fundis WHERE id = ?", [
-      req.params.id,
-    ]);
+      if (!fundi) {
+        return res.status(404).json({ error: "Fundi not found" });
+      }
 
-    if (!existing.length) {
-      return res.status(404).json({
-        error: "Fundi not found",
-      });
+      const update = {
+        name,
+        email,
+        location,
+        skill,
+        bio,
+        phone_number: phone_number ? Number(phone_number) : null,
+      };
+
+      if (req.files?.profile_photo?.[0]) {
+        update.profile_photo = await uploadFile(req.files.profile_photo[0], "fundis/profile-photos");
+      }
+
+      if (req.files?.good_conduct_certificate?.[0]) {
+        update.good_conduct_certificate = await uploadFile(
+          req.files.good_conduct_certificate[0],
+          "fundis/good-conduct"
+        );
+      }
+
+      if (req.files?.professional_certificates?.[0]) {
+        update.professional_certificates = await uploadFile(
+          req.files.professional_certificates[0],
+          "fundis/professional-certificates"
+        );
+      }
+
+      await updateById(COLLECTIONS.fundis, req.params.id, update);
+      res.json({ message: "Profile updated successfully" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update profile" });
     }
-
-    const updates = [
-      "name = ?",
-      "email = ?",
-      "location = ?",
-      "skill = ?",
-      "bio = ?",
-      "phone_number = ?",
-    ];
-    const params = [name, email, location, skill, bio, phone_number];
-
-    if (req.files?.profile_photo?.[0]) {
-      updates.push("profile_photo = ?");
-      params.push(req.files.profile_photo[0].buffer);
-    }
-
-    if (req.files?.good_conduct_certificate?.[0]) {
-      updates.push("good_conduct_certificate = ?");
-      params.push(req.files.good_conduct_certificate[0].buffer);
-    }
-
-    if (req.files?.professional_certificates?.[0]) {
-      updates.push("professional_certificates = ?");
-      params.push(req.files.professional_certificates[0].buffer);
-    }
-
-    params.push(req.params.id);
-
-    await db.query(
-      `UPDATE fundis
-       SET ${updates.join(", ")}
-       WHERE id = ?`,
-      params
-    );
-
-    res.json({
-      message: "Profile updated successfully",
-    });
-  } catch (err) {
-    console.error(err);
-
-    res.status(500).json({
-      error: "Failed to update profile",
-    });
   }
-});
+);
 
 module.exports = router;

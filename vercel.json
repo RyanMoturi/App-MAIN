@@ -1,0 +1,15 @@
+{
+  "installCommand": "cd fundi-frontend && npm install",
+  "buildCommand": "cd fundi-frontend && npm run build",
+  "outputDirectory": "fundi-frontend/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://YOUR-BACKEND-URL.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

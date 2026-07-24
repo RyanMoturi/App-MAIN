@@ -1,344 +1,199 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const db = require("../db");
+const {
+  COLLECTIONS,
+  addWithId,
+  all,
+  deleteById,
+  findOne,
+  getById,
+  sortByDateDesc,
+  timestamp,
+  toDataUrl,
+  updateById,
+} = require("../firestoreStore");
 
 const router = express.Router();
-
 const saltRounds = 10;
 
-const toDataUrl = (buffer, mimeType = "image/jpeg") => {
-  if (!buffer) return null;
-  return `data:${mimeType};base64,${buffer.toString("base64")}`;
-};
+const matches = (value, search) =>
+  String(value || "").toLowerCase().includes(String(search || "").toLowerCase());
 
-// ================= ADMIN SIGNUP =================
 router.post("/signup", async (req, res) => {
-  const {
-    full_name,
-    email,
-    username,
-    password,
-  } = req.body;
+  const { full_name, email, username, password } = req.body;
 
   try {
-    const [existing] = await db.query(
-      "SELECT * FROM admins WHERE email=?",
-      [email]
-    );
+    const existing = await findOne(COLLECTIONS.admins, "email", email);
 
-    if (existing.length) {
-      return res.status(400).json({
-        error: "Admin already exists",
-      });
+    if (existing) {
+      return res.status(400).json({ error: "Admin already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(
-      password,
-      saltRounds
-    );
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    await db.query(
-      `INSERT INTO admins
-      (full_name,email,username,password_hash,role)
-      VALUES (?,?,?,?,?)`,
-      [
-        full_name,
-        email,
-        username,
-        hashedPassword,
-        "Super Admin",
-      ]
-    );
-
-    res.status(201).json({
-      message: "Admin created successfully",
+    await addWithId(COLLECTIONS.admins, {
+      full_name,
+      email,
+      username,
+      password_hash: hashedPassword,
+      role: "Super Admin",
+      created_at: timestamp(),
     });
 
+    res.status(201).json({ message: "Admin created successfully" });
   } catch (err) {
     console.error(err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-
-// ================= DASHBOARD =================
 router.get("/dashboard", async (req, res) => {
-
   try {
+    const [clients, fundis, jobs] = await Promise.all([
+      all(COLLECTIONS.clients),
+      all(COLLECTIONS.fundis),
+      all(COLLECTIONS.jobs),
+    ]);
 
-    const [[clientCount]] = await db.query(
-      "SELECT COUNT(*) AS totalClients FROM clients"
-    );
-
-    const [[fundiCount]] = await db.query(
-      "SELECT COUNT(*) AS totalFundis FROM fundis"
-    );
-
-    const [[jobCount]] = await db.query(
-      "SELECT COUNT(*) AS totalJobs FROM jobs"
-    );
-
-    const [[skillCount]] = await db.query(
-      "SELECT COUNT(DISTINCT skill) AS totalSkills FROM fundis"
-    );
-
-    const [recentClients] = await db.query(`
-      SELECT id,name,email,created_at
-      FROM clients
-      ORDER BY created_at DESC
-      LIMIT 5
-    `);
-
-    const [recentFundis] = await db.query(`
-      SELECT id,name,skill,location,rating,is_verified,verification_status,is_flagged,is_banned,created_at
-      FROM fundis
-      ORDER BY created_at DESC
-      LIMIT 5
-    `);
+    const skills = new Set(fundis.map((fundi) => fundi.skill).filter(Boolean));
 
     res.json({
-      clients: clientCount.totalClients,
-      fundis: fundiCount.totalFundis,
-      jobs: jobCount.totalJobs,
-      skills: skillCount.totalSkills,
-      recentClients,
-      recentFundis,
+      clients: clients.length,
+      fundis: fundis.length,
+      jobs: jobs.length,
+      skills: skills.size,
+      recentClients: sortByDateDesc(clients, "created_at")
+        .slice(0, 5)
+        .map(({ id, name, email, created_at }) => ({ id, name, email, created_at })),
+      recentFundis: sortByDateDesc(fundis, "created_at").slice(0, 5).map((fundi) => ({
+        id: fundi.id,
+        name: fundi.name,
+        skill: fundi.skill,
+        location: fundi.location,
+        rating: fundi.rating,
+        is_verified: fundi.is_verified,
+        verification_status: fundi.verification_status,
+        is_flagged: fundi.is_flagged,
+        is_banned: fundi.is_banned,
+        created_at: fundi.created_at,
+      })),
     });
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Dashboard failed",
-    });
-
+    res.status(500).json({ error: "Dashboard failed" });
   }
-
 });
 
-
-// ================= GET ALL CLIENTS =================
 router.get("/clients", async (req, res) => {
-
   try {
-
-    const [clients] = await db.query(`
-      SELECT
+    const clients = sortByDateDesc(await all(COLLECTIONS.clients), "created_at").map(
+      ({ id, name, email, location, phone_number, created_at }) => ({
         id,
         name,
         email,
         location,
         phone_number,
-        created_at
-      FROM clients
-      ORDER BY created_at DESC
-    `);
+        created_at,
+      })
+    );
 
     res.json(clients);
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to load clients",
-    });
-
+    res.status(500).json({ error: "Failed to load clients" });
   }
-
 });
 
-
-// ================= SEARCH CLIENTS =================
 router.get("/clients/search/:search", async (req, res) => {
-
-  const search = `%${req.params.search}%`;
-
   try {
-
-    const [clients] = await db.query(
-      `SELECT
+    const search = req.params.search;
+    const clients = sortByDateDesc(await all(COLLECTIONS.clients), "created_at")
+      .filter(
+        (client) =>
+          matches(client.name, search) ||
+          matches(client.email, search) ||
+          matches(client.location, search)
+      )
+      .map(({ id, name, email, location, phone_number, created_at }) => ({
         id,
         name,
         email,
         location,
         phone_number,
-        created_at
-      FROM clients
-      WHERE
-        name LIKE ?
-        OR email LIKE ?
-        OR location LIKE ?
-      ORDER BY created_at DESC`,
-      [search, search, search]
-    );
+        created_at,
+      }));
 
     res.json(clients);
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Search failed",
-    });
-
+    res.status(500).json({ error: "Search failed" });
   }
-
 });
 
-
-// ================= DELETE CLIENT =================
 router.delete("/client/:id", async (req, res) => {
-
   try {
-
-    const [result] = await db.query(
-      "DELETE FROM clients WHERE id=?",
-      [req.params.id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        error: "Client not found",
-      });
+    if (!(await deleteById(COLLECTIONS.clients, req.params.id))) {
+      return res.status(404).json({ error: "Client not found" });
     }
 
-    res.json({
-      message: "Client deleted successfully",
-    });
-
+    res.json({ message: "Client deleted successfully" });
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to delete client",
-    });
-
+    res.status(500).json({ error: "Failed to delete client" });
   }
-
 });
 
-
-// ================= GET ALL FUNDIS =================
 router.get("/fundis", async (req, res) => {
-
   try {
-
-    const [fundis] = await db.query(`
-      SELECT
-        id,
-        name,
-        email,
-        skill,
-        location,
-        rating,
-        is_verified,
-        verification_status,
-        is_flagged,
-        is_banned,
-        created_at
-      FROM fundis
-      ORDER BY created_at DESC
-    `);
+    const fundis = sortByDateDesc(await all(COLLECTIONS.fundis), "created_at").map((fundi) => ({
+      id: fundi.id,
+      name: fundi.name,
+      email: fundi.email,
+      skill: fundi.skill,
+      location: fundi.location,
+      rating: fundi.rating,
+      is_verified: fundi.is_verified,
+      verification_status: fundi.verification_status,
+      is_flagged: fundi.is_flagged,
+      is_banned: fundi.is_banned,
+      created_at: fundi.created_at,
+    }));
 
     res.json(fundis);
-
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to load fundis",
-    });
-
+    res.status(500).json({ error: "Failed to load fundis" });
   }
-
 });
 
-
-// ================= DELETE FUNDI =================
 router.delete("/fundi/:id", async (req, res) => {
-
   try {
-
-    const [result] = await db.query(
-      "DELETE FROM fundis WHERE id=?",
-      [req.params.id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        error: "Fundi not found",
-      });
-    }
-
-    res.json({
-      message: "Fundi deleted successfully",
-    });
-
-  } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      error: "Failed to delete fundi",
-    });
-
-  }
-
-});
-
-// ================= GET FUNDI VERIFICATION DETAILS =================
-router.get("/fundi/:id", async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT
-        id,
-        name,
-        email,
-        national_id,
-        id_photo,
-        profile_photo,
-        good_conduct_certificate,
-        professional_certificates,
-        skill,
-        bio,
-        location,
-        phone_number,
-        rating,
-        is_verified,
-        verification_status,
-        verification_note,
-        is_flagged,
-        is_banned,
-        created_at
-       FROM fundis
-       WHERE id = ?`,
-      [req.params.id]
-    );
-
-    if (!rows.length) {
+    if (!(await deleteById(COLLECTIONS.fundis, req.params.id))) {
       return res.status(404).json({ error: "Fundi not found" });
     }
 
+    res.json({ message: "Fundi deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete fundi" });
+  }
+});
+
+router.get("/fundi/:id", async (req, res) => {
+  try {
+    const fundi = await getById(COLLECTIONS.fundis, req.params.id);
+
+    if (!fundi) {
+      return res.status(404).json({ error: "Fundi not found" });
+    }
+
+    const { password_hash, ...safeFundi } = fundi;
     res.json({
-      ...rows[0],
-      id_photo: toDataUrl(rows[0].id_photo),
-      profile_photo: toDataUrl(rows[0].profile_photo),
-      good_conduct_certificate: toDataUrl(
-        rows[0].good_conduct_certificate,
-        "application/octet-stream"
-      ),
-      professional_certificates: toDataUrl(
-        rows[0].professional_certificates,
-        "application/octet-stream"
-      ),
+      ...safeFundi,
+      id_photo: toDataUrl(fundi.id_photo),
+      profile_photo: toDataUrl(fundi.profile_photo),
+      good_conduct_certificate: toDataUrl(fundi.good_conduct_certificate, "application/octet-stream"),
+      professional_certificates: toDataUrl(fundi.professional_certificates, "application/octet-stream"),
     });
   } catch (err) {
     console.error(err);
@@ -346,7 +201,6 @@ router.get("/fundi/:id", async (req, res) => {
   }
 });
 
-// ================= VERIFY / REJECT FUNDI =================
 router.put("/fundi/:id/verification", async (req, res) => {
   const { status, note } = req.body;
 
@@ -355,16 +209,13 @@ router.put("/fundi/:id/verification", async (req, res) => {
   }
 
   try {
-    const isVerified = status === "Verified" ? 1 : 0;
+    const updated = await updateById(COLLECTIONS.fundis, req.params.id, {
+      is_verified: status === "Verified" ? 1 : 0,
+      verification_status: status,
+      verification_note: note || null,
+    });
 
-    const [result] = await db.query(
-      `UPDATE fundis
-       SET is_verified = ?, verification_status = ?, verification_note = ?
-       WHERE id = ?`,
-      [isVerified, status, note || null, req.params.id]
-    );
-
-    if (result.affectedRows === 0) {
+    if (!updated) {
       return res.status(404).json({ error: "Fundi not found" });
     }
 

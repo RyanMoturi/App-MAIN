@@ -1,28 +1,55 @@
 const express = require("express");
-const db = require("./db");
+const {
+  COLLECTIONS,
+  addWithId,
+  all,
+  createNotification,
+  getById,
+  sortByDateAsc,
+  sortByDateDesc,
+  timestamp,
+  updateById,
+  whereEqual,
+} = require("./firestoreStore");
+
+const matches = (value, search) =>
+  String(value || "").toLowerCase().includes(String(search || "").toLowerCase());
 
 const getUserName = async (userId, role) => {
-  const table = role === "client" ? "clients" : "fundis";
-  const nameColumn = role === "client" ? "name" : "name";
-  const [rows] = await db.query(`SELECT ${nameColumn} AS name FROM ${table} WHERE id = ?`, [userId]);
-  return rows[0]?.name || "Unknown";
+  const collection = role === "client" ? COLLECTIONS.clients : COLLECTIONS.fundis;
+  const user = await getById(collection, userId);
+  return user?.name || "Unknown";
 };
 
-const createNotification = async (userId, userRole, type, content) => {
-  await db.query(
-    `INSERT INTO notifications (user_id, user_role, type, content)
-     VALUES (?, ?, ?, ?)`,
-    [userId, userRole, type, content]
-  );
+const getAcceptedApplication = async (jobId) => {
+  const applications = await whereEqual(COLLECTIONS.applications, "job_id", jobId);
+  return applications.find((application) => application.status === "Accepted") || null;
+};
+
+const ensureAssignmentForApplication = async (application) => {
+  const existing = await whereEqual(COLLECTIONS.jobAssignments, "job_id", application.job_id);
+  if (existing.length) return existing[0];
+
+  return addWithId(COLLECTIONS.jobAssignments, {
+    job_id: Number(application.job_id),
+    fundi_id: Number(application.fundi_id),
+    assigned_at: timestamp(),
+    completed_at: null,
+  });
 };
 
 const updateFundiRating = async (fundiId) => {
-  const [avgRows] = await db.query(
-    "SELECT ROUND(AVG(rating), 2) AS avg_rating FROM reviews WHERE fundi_id = ?",
-    [fundiId]
-  );
-  const avgRating = avgRows[0]?.avg_rating || 0;
-  await db.query("UPDATE fundis SET rating = ? WHERE id = ?", [avgRating, fundiId]);
+  const reviews = await whereEqual(COLLECTIONS.reviews, "fundi_id", fundiId);
+  const avgRating =
+    reviews.length > 0
+      ? Math.round(
+          (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) /
+            reviews.length) *
+            100
+        ) / 100
+      : 0;
+
+  await updateById(COLLECTIONS.fundis, fundiId, { rating: avgRating });
   return avgRating;
 };
 
@@ -31,23 +58,29 @@ module.exports = (io) => {
 
   router.get("/fundis", async (req, res) => {
     const { skill, location } = req.query;
+
     try {
-      let sql = "SELECT id, name, skill, bio, location, rating FROM fundis WHERE 1=1";
-      const params = [];
+      let rows = await all(COLLECTIONS.fundis);
 
-      if (skill) {
-        sql += " AND skill LIKE ?";
-        params.push(`%${skill}%`);
-      }
+      if (skill) rows = rows.filter((fundi) => matches(fundi.skill, skill));
+      if (location) rows = rows.filter((fundi) => matches(fundi.location, location));
 
-      if (location) {
-        sql += " AND location LIKE ?";
-        params.push(`%${location}%`);
-      }
+      rows.sort(
+        (a, b) =>
+          Number(b.rating || 0) - Number(a.rating || 0) ||
+          String(a.name || "").localeCompare(String(b.name || ""))
+      );
 
-      sql += " ORDER BY rating DESC, name ASC";
-      const [rows] = await db.query(sql, params);
-      res.json(rows);
+      res.json(
+        rows.map(({ id, name, skill, bio, location, rating }) => ({
+          id,
+          name,
+          skill,
+          bio,
+          location,
+          rating,
+        }))
+      );
     } catch (err) {
       console.error("Error searching fundis:", err);
       res.status(500).json({ error: "Failed to search fundis" });
@@ -56,12 +89,11 @@ module.exports = (io) => {
 
   router.get("/fundis/:fundiId", async (req, res) => {
     try {
-      const [rows] = await db.query(
-        "SELECT id, name, skill, bio, location, rating FROM fundis WHERE id = ?",
-        [req.params.fundiId]
-      );
-      if (!rows.length) return res.status(404).json({ error: "Fundi not found" });
-      res.json(rows[0]);
+      const fundi = await getById(COLLECTIONS.fundis, req.params.fundiId);
+      if (!fundi) return res.status(404).json({ error: "Fundi not found" });
+
+      const { id, name, skill, bio, location, rating } = fundi;
+      res.json({ id, name, skill, bio, location, rating });
     } catch (err) {
       console.error("Error fetching fundi:", err);
       res.status(500).json({ error: "Failed to fetch fundi" });
@@ -73,14 +105,10 @@ module.exports = (io) => {
     const { fundi_id, message } = req.body;
 
     try {
-      const [[job]] = await db.query("SELECT id FROM jobs WHERE id = ?", [jobId]);
+      const job = await getById(COLLECTIONS.jobs, jobId);
       if (!job) return res.status(404).json({ error: "Job not found" });
 
-      const [[fundi]] = await db.query(
-        "SELECT is_verified, is_banned FROM fundis WHERE id = ?",
-        [fundi_id]
-      );
-
+      const fundi = await getById(COLLECTIONS.fundis, fundi_id);
       if (!fundi?.is_verified) {
         return res.status(403).json({ error: "Your account is pending admin verification" });
       }
@@ -89,22 +117,28 @@ module.exports = (io) => {
         return res.status(403).json({ error: "Your account has been banned by admin" });
       }
 
-      const [[accepted]] = await db.query(
-        "SELECT id FROM applications WHERE job_id = ? AND status = 'Accepted' LIMIT 1",
-        [jobId]
-      );
-      if (accepted) return res.status(400).json({ error: "This job is already taken" });
+      if (await getAcceptedApplication(jobId)) {
+        return res.status(400).json({ error: "This job is already taken" });
+      }
 
-      await db.query(
-        "INSERT INTO applications (job_id, fundi_id, message, status) VALUES (?, ?, ?, 'Pending')",
-        [jobId, fundi_id, message || ""]
+      const duplicate = (await whereEqual(COLLECTIONS.applications, "job_id", jobId)).find(
+        (application) => String(application.fundi_id) === String(fundi_id)
       );
+
+      if (duplicate) {
+        return res.status(400).json({ error: "You already applied to this job" });
+      }
+
+      await addWithId(COLLECTIONS.applications, {
+        job_id: Number(jobId),
+        fundi_id: Number(fundi_id),
+        message: message || "",
+        status: "Pending",
+        applied_at: timestamp(),
+      });
 
       res.status(201).json({ message: "Application submitted" });
     } catch (err) {
-      if (err.code === "ER_DUP_ENTRY") {
-        return res.status(400).json({ error: "You already applied to this job" });
-      }
       console.error("Error applying to job:", err);
       res.status(500).json({ error: "Failed to submit application" });
     }
@@ -112,15 +146,22 @@ module.exports = (io) => {
 
   router.get("/jobs/:jobId/applications", async (req, res) => {
     try {
-      const [rows] = await db.query(
-        `SELECT a.*, f.name AS fundi_name, f.skill
-         FROM applications a
-         JOIN fundis f ON a.fundi_id = f.id
-         WHERE a.job_id = ?
-         ORDER BY a.applied_at DESC`,
-        [req.params.jobId]
-      );
-      res.json(rows);
+      const [applications, fundis] = await Promise.all([
+        whereEqual(COLLECTIONS.applications, "job_id", req.params.jobId),
+        all(COLLECTIONS.fundis),
+      ]);
+      const fundiById = new Map(fundis.map((fundi) => [String(fundi.id), fundi]));
+
+      const rows = applications.map((application) => {
+        const fundi = fundiById.get(String(application.fundi_id)) || {};
+        return {
+          ...application,
+          fundi_name: fundi.name,
+          skill: fundi.skill,
+        };
+      });
+
+      res.json(sortByDateDesc(rows, "applied_at"));
     } catch (err) {
       console.error("Error fetching applications:", err);
       res.status(500).json({ error: "Failed to fetch applications" });
@@ -129,15 +170,20 @@ module.exports = (io) => {
 
   router.get("/jobs/:jobId/accepted-fundi", async (req, res) => {
     try {
-      const [rows] = await db.query(
-        `SELECT a.fundi_id, f.name, f.skill, f.rating
-         FROM applications a
-         JOIN fundis f ON a.fundi_id = f.id
-         WHERE a.job_id = ? AND a.status = 'Accepted'
-         LIMIT 1`,
-        [req.params.jobId]
+      const accepted = await getAcceptedApplication(req.params.jobId);
+      if (!accepted) return res.json(null);
+
+      const fundi = await getById(COLLECTIONS.fundis, accepted.fundi_id);
+      res.json(
+        fundi
+          ? {
+              fundi_id: fundi.id,
+              name: fundi.name,
+              skill: fundi.skill,
+              rating: fundi.rating,
+            }
+          : null
       );
-      res.json(rows[0] || null);
     } catch (err) {
       console.error("Error fetching accepted fundi:", err);
       res.status(500).json({ error: "Failed to fetch accepted fundi" });
@@ -151,44 +197,37 @@ module.exports = (io) => {
     }
 
     try {
-      const [[application]] = await db.query(
-        `SELECT a.*, j.title, j.client_id
-         FROM applications a
-         JOIN jobs j ON j.id = a.job_id
-         WHERE a.id = ?`,
-        [applicationId]
-      );
-
+      const application = await getById(COLLECTIONS.applications, applicationId);
       if (!application) return res.status(404).json({ error: "Application not found" });
 
-      await db.query("UPDATE applications SET status = ? WHERE id = ?", [
-        action === "accept" ? "Accepted" : "Rejected",
-        applicationId,
-      ]);
+      const job = await getById(COLLECTIONS.jobs, application.job_id);
 
       if (action === "accept") {
-        await db.query("UPDATE applications SET status = 'Rejected' WHERE job_id = ? AND id <> ?", [
-          application.job_id,
-          applicationId,
-        ]);
-        await db.query(
-          `INSERT INTO job_assignments (job_id, fundi_id)
-           SELECT ?, ?
-           WHERE NOT EXISTS (SELECT 1 FROM job_assignments WHERE job_id = ?)`,
-          [application.job_id, application.fundi_id, application.job_id]
+        const allForJob = await whereEqual(COLLECTIONS.applications, "job_id", application.job_id);
+        await Promise.all(
+          allForJob.map((item) =>
+            updateById(COLLECTIONS.applications, item.id, {
+              status: String(item.id) === String(applicationId) ? "Accepted" : "Rejected",
+            })
+          )
         );
+
+        await ensureAssignmentForApplication(application);
+
         await createNotification(
           application.fundi_id,
           "fundi",
           "application_accepted",
-          `Your application for "${application.title}" was accepted.`
+          `Your application for "${job?.title || "this job"}" was accepted.`
         );
         await createNotification(
-          application.client_id,
+          job.client_id,
           "client",
           "job_in_progress",
-          `"${application.title}" is now in progress.`
+          `"${job.title}" is now in progress.`
         );
+      } else {
+        await updateById(COLLECTIONS.applications, applicationId, { status: "Rejected" });
       }
 
       res.json({ message: `Application ${action}ed` });
@@ -205,89 +244,66 @@ module.exports = (io) => {
     }
 
     try {
-      const [[assignment]] = await db.query(
-        `SELECT ja.*, j.client_id, j.title
-         FROM job_assignments ja
-         JOIN jobs j ON j.id = ja.job_id
-         WHERE ja.job_id = ? AND ja.fundi_id IN (?, ?) AND j.client_id IN (?, ?)`,
-        [job_id, sender_id, receiver_id, sender_id, receiver_id]
+      const [job, assignments, messages] = await Promise.all([
+        getById(COLLECTIONS.jobs, job_id),
+        whereEqual(COLLECTIONS.jobAssignments, "job_id", job_id),
+        whereEqual(COLLECTIONS.messages, "job_id", job_id),
+      ]);
+
+      const assignment = assignments.find(
+        (item) =>
+          String(item.fundi_id) === String(sender_id) ||
+          String(item.fundi_id) === String(receiver_id)
       );
 
-      let messageJob = assignment;
+      const isClientContact =
+        job &&
+        String(job.client_id) === String(sender_id) &&
+        sender_role === "client" &&
+        receiver_role === "fundi";
 
-      if (!messageJob) {
-        const [[clientContactJob]] = await db.query(
-          `SELECT id AS job_id, client_id, title
-           FROM jobs
-           WHERE id = ?
-             AND client_id = ?
-             AND ? = 'client'
-             AND ? = 'fundi'`,
-          [job_id, sender_id, sender_role, receiver_role]
-        );
-
-        const [[existingThread]] = await db.query(
-          `SELECT j.id AS job_id, j.client_id, j.title
-           FROM messages m
-           JOIN jobs j ON j.id = m.job_id
-           WHERE m.job_id = ?
-             AND (
-              (m.sender_id = ? AND m.sender_role = ? AND m.receiver_id = ? AND m.receiver_role = ?)
-              OR
-              (m.sender_id = ? AND m.sender_role = ? AND m.receiver_id = ? AND m.receiver_role = ?)
-             )
-           LIMIT 1`,
-          [
-            job_id,
-            sender_id,
-            sender_role,
-            receiver_id,
-            receiver_role,
-            receiver_id,
-            receiver_role,
-            sender_id,
-            sender_role,
-          ]
-        );
-
-        messageJob = clientContactJob || existingThread;
-      }
-
-      if (!messageJob) {
-        return res.status(403).json({ error: "Messages are only available for accepted jobs or client contact requests" });
-      }
-
-      const [result] = await db.query(
-        `INSERT INTO messages
-          (job_id, sender_id, receiver_id, sender_role, receiver_role, content)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [job_id, sender_id, receiver_id, sender_role, receiver_role, content.trim()]
+      const existingThread = messages.some(
+        (message) =>
+          (String(message.sender_id) === String(sender_id) &&
+            message.sender_role === sender_role &&
+            String(message.receiver_id) === String(receiver_id) &&
+            message.receiver_role === receiver_role) ||
+          (String(message.sender_id) === String(receiver_id) &&
+            message.sender_role === receiver_role &&
+            String(message.receiver_id) === String(sender_id) &&
+            message.receiver_role === sender_role)
       );
 
-      const messagePayload = {
-        id: result.insertId,
-        job_id,
-        sender_id,
-        receiver_id,
+      if (!assignment && !isClientContact && !existingThread) {
+        return res.status(403).json({
+          error: "Messages are only available for accepted jobs or client contact requests",
+        });
+      }
+
+      const newMessage = await addWithId(COLLECTIONS.messages, {
+        job_id: Number(job_id),
+        sender_id: Number(sender_id),
+        receiver_id: Number(receiver_id),
         sender_role,
         receiver_role,
         content: content.trim(),
-        sent_at: new Date().toISOString(),
-      };
+        sent_at: timestamp(),
+      });
 
       const senderName = await getUserName(sender_id, sender_role);
-      await createNotification(
-        receiver_id,
-        receiver_role,
-        "message",
-        `${senderName} sent you a message about "${messageJob.title}".`
-      );
+      const notificationContent = `${senderName} sent you a message about "${job?.title || "this job"}".`;
+      await createNotification(receiver_id, receiver_role, "message", notificationContent);
+
+      const messagePayload = {
+        ...newMessage,
+        sent_at: new Date().toISOString(),
+      };
 
       if (io) {
         io.to(`user_${receiver_role}_${receiver_id}`).emit("receive_message", messagePayload);
         io.to(`user_${receiver_role}_${receiver_id}`).emit("receive_notification", {
           type: "message",
-          content: `${senderName} sent you a message about "${messageJob.title}".`,
+          content: notificationContent,
         });
       }
 
@@ -305,29 +321,19 @@ module.exports = (io) => {
     }
 
     try {
-      const [rows] = await db.query(
-        `SELECT *
-         FROM messages
-         WHERE job_id = ?
-           AND (
-            (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-            OR
-            (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-           )
-         ORDER BY sent_at ASC`,
-        [
-          jobId,
-          userId,
-          userRole,
-          otherUserId,
-          otherUserRole,
-          otherUserId,
-          otherUserRole,
-          userId,
-          userRole,
-        ]
+      const rows = (await whereEqual(COLLECTIONS.messages, "job_id", jobId)).filter(
+        (message) =>
+          (String(message.sender_id) === String(userId) &&
+            message.sender_role === userRole &&
+            String(message.receiver_id) === String(otherUserId) &&
+            message.receiver_role === otherUserRole) ||
+          (String(message.sender_id) === String(otherUserId) &&
+            message.sender_role === otherUserRole &&
+            String(message.receiver_id) === String(userId) &&
+            message.receiver_role === userRole)
       );
-      res.json(rows);
+
+      res.json(sortByDateAsc(rows, "sent_at"));
     } catch (err) {
       console.error("Error fetching messages:", err);
       res.status(500).json({ error: "Failed to fetch messages" });
@@ -341,153 +347,100 @@ module.exports = (io) => {
     }
 
     try {
-      const params = [userId];
-      const condition =
-        userRole === "client" ? "j.client_id = ?" : "ja.fundi_id = ?";
-      const otherJoin =
-        userRole === "client"
-          ? "JOIN fundis other_user ON other_user.id = ja.fundi_id"
-          : "JOIN clients other_user ON other_user.id = j.client_id";
-      const otherRole = userRole === "client" ? "fundi" : "client";
-      const otherIdColumn = userRole === "client" ? "ja.fundi_id" : "j.client_id";
+      const [jobs, assignments, messages, clients, fundis] = await Promise.all([
+        all(COLLECTIONS.jobs),
+        all(COLLECTIONS.jobAssignments),
+        all(COLLECTIONS.messages),
+        all(COLLECTIONS.clients),
+        all(COLLECTIONS.fundis),
+      ]);
+      const jobById = new Map(jobs.map((job) => [String(job.id), job]));
+      const clientById = new Map(clients.map((client) => [String(client.id), client]));
+      const fundiById = new Map(fundis.map((fundi) => [String(fundi.id), fundi]));
+      const conversations = new Map();
 
-      const [assignments] = await db.query(
-        `SELECT
-          ja.job_id,
-          j.title AS job_title,
-          ${otherIdColumn} AS other_user_id,
-          ? AS other_user_role,
-          other_user.name AS other_user_name,
-          ja.assigned_at,
-          ja.completed_at
-         FROM job_assignments ja
-         JOIN jobs j ON j.id = ja.job_id
-         ${otherJoin}
-         WHERE ${condition}
-         ORDER BY ja.assigned_at DESC`,
-        [otherRole, ...params]
-      );
+      const addConversation = ({ job_id, other_user_id, other_user_role, assigned_at, completed_at }) => {
+        const job = jobById.get(String(job_id));
+        const otherUser =
+          other_user_role === "client"
+            ? clientById.get(String(other_user_id))
+            : fundiById.get(String(other_user_id));
+        const relevantMessages = messages.filter(
+          (message) =>
+            String(message.job_id) === String(job_id) &&
+            ((String(message.sender_id) === String(userId) &&
+              message.sender_role === userRole &&
+              String(message.receiver_id) === String(other_user_id) &&
+              message.receiver_role === other_user_role) ||
+              (String(message.sender_id) === String(other_user_id) &&
+                message.sender_role === other_user_role &&
+                String(message.receiver_id) === String(userId) &&
+                message.receiver_role === userRole))
+        );
+        const lastMessage = sortByDateDesc(relevantMessages, "sent_at")[0];
+        const key = `${job_id}:${other_user_role}:${other_user_id}`;
 
-      const conversations = [];
+        conversations.set(key, {
+          job_id: Number(job_id),
+          job_title: job?.title,
+          other_user_id: Number(other_user_id),
+          other_user_role,
+          other_user_name: otherUser?.name || "Unknown",
+          assigned_at,
+          completed_at: completed_at || null,
+          last_message: lastMessage?.content || "Conversation ready",
+          last_sent_at: lastMessage?.sent_at || assigned_at,
+        });
+      };
+
       for (const assignment of assignments) {
-        const [[lastMessage]] = await db.query(
-          `SELECT content, sent_at
-           FROM messages
-           WHERE job_id = ?
-             AND (
-              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-              OR
-              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-             )
-           ORDER BY sent_at DESC
-           LIMIT 1`,
-          [
-            assignment.job_id,
-            userId,
-            userRole,
-            assignment.other_user_id,
-            assignment.other_user_role,
-            assignment.other_user_id,
-            assignment.other_user_role,
-            userId,
-            userRole,
-          ]
-        );
+        const job = jobById.get(String(assignment.job_id));
+        if (!job) continue;
 
-        conversations.push({
-          ...assignment,
-          last_message: lastMessage?.content || "Conversation ready",
-          last_sent_at: lastMessage?.sent_at || assignment.assigned_at,
-        });
+        if (userRole === "client" && String(job.client_id) === String(userId)) {
+          addConversation({
+            job_id: assignment.job_id,
+            other_user_id: assignment.fundi_id,
+            other_user_role: "fundi",
+            assigned_at: assignment.assigned_at,
+            completed_at: assignment.completed_at,
+          });
+        }
+
+        if (userRole === "fundi" && String(assignment.fundi_id) === String(userId)) {
+          addConversation({
+            job_id: assignment.job_id,
+            other_user_id: job.client_id,
+            other_user_role: "client",
+            assigned_at: assignment.assigned_at,
+            completed_at: assignment.completed_at,
+          });
+        }
       }
 
-      const [messageThreads] = await db.query(
-        userRole === "client"
-          ? `SELECT
-              m.job_id,
-              j.title AS job_title,
-              f.id AS other_user_id,
-              'fundi' AS other_user_role,
-              f.name AS other_user_name,
-              MIN(m.sent_at) AS assigned_at,
-              NULL AS completed_at,
-              MAX(m.sent_at) AS last_sent_at
-             FROM messages m
-             JOIN jobs j ON j.id = m.job_id
-             JOIN fundis f ON f.id = CASE
-                WHEN m.sender_role = 'fundi' THEN m.sender_id
-                ELSE m.receiver_id
-              END
-             WHERE (m.sender_id = ? AND m.sender_role = 'client')
-                OR (m.receiver_id = ? AND m.receiver_role = 'client')
-             GROUP BY m.job_id, j.title, f.id, f.name`
-          : `SELECT
-              m.job_id,
-              j.title AS job_title,
-              c.id AS other_user_id,
-              'client' AS other_user_role,
-              c.name AS other_user_name,
-              MIN(m.sent_at) AS assigned_at,
-              NULL AS completed_at,
-              MAX(m.sent_at) AS last_sent_at
-             FROM messages m
-             JOIN jobs j ON j.id = m.job_id
-             JOIN clients c ON c.id = CASE
-                WHEN m.sender_role = 'client' THEN m.sender_id
-                ELSE m.receiver_id
-              END
-             WHERE (m.sender_id = ? AND m.sender_role = 'fundi')
-                OR (m.receiver_id = ? AND m.receiver_role = 'fundi')
-             GROUP BY m.job_id, j.title, c.id, c.name`,
-        [userId, userId]
-      );
+      for (const message of messages) {
+        if (message.sender_role === userRole && String(message.sender_id) === String(userId)) {
+          addConversation({
+            job_id: message.job_id,
+            other_user_id: message.receiver_id,
+            other_user_role: message.receiver_role,
+            assigned_at: message.sent_at,
+            completed_at: null,
+          });
+        }
 
-      for (const thread of messageThreads) {
-        const exists = conversations.some(
-          (conversation) =>
-            String(conversation.job_id) === String(thread.job_id) &&
-            String(conversation.other_user_id) === String(thread.other_user_id) &&
-            conversation.other_user_role === thread.other_user_role
-        );
-
-        if (exists) continue;
-
-        const [[lastMessage]] = await db.query(
-          `SELECT content, sent_at
-           FROM messages
-           WHERE job_id = ?
-             AND (
-              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-              OR
-              (sender_id = ? AND sender_role = ? AND receiver_id = ? AND receiver_role = ?)
-             )
-           ORDER BY sent_at DESC
-           LIMIT 1`,
-          [
-            thread.job_id,
-            userId,
-            userRole,
-            thread.other_user_id,
-            thread.other_user_role,
-            thread.other_user_id,
-            thread.other_user_role,
-            userId,
-            userRole,
-          ]
-        );
-
-        conversations.push({
-          ...thread,
-          last_message: lastMessage?.content || "Conversation ready",
-          last_sent_at: lastMessage?.sent_at || thread.last_sent_at,
-        });
+        if (message.receiver_role === userRole && String(message.receiver_id) === String(userId)) {
+          addConversation({
+            job_id: message.job_id,
+            other_user_id: message.sender_id,
+            other_user_role: message.sender_role,
+            assigned_at: message.sent_at,
+            completed_at: null,
+          });
+        }
       }
 
-      conversations.sort(
-        (a, b) => new Date(b.last_sent_at) - new Date(a.last_sent_at)
-      );
-
-      res.json(conversations);
+      res.json(sortByDateDesc([...conversations.values()], "last_sent_at"));
     } catch (err) {
       console.error("Error fetching conversations:", err);
       res.status(500).json({ error: "Failed to fetch conversations" });
@@ -501,14 +454,10 @@ module.exports = (io) => {
     }
 
     try {
-      const [rows] = await db.query(
-        `SELECT *
-         FROM notifications
-         WHERE user_id = ? AND user_role = ?
-         ORDER BY created_at DESC`,
-        [userId, userRole]
+      const rows = (await whereEqual(COLLECTIONS.notifications, "user_id", userId)).filter(
+        (notification) => notification.user_role === userRole
       );
-      res.json(rows);
+      res.json(sortByDateDesc(rows, "created_at"));
     } catch (err) {
       console.error("Error fetching notifications:", err);
       res.status(500).json({ error: "Failed to fetch notifications" });
@@ -522,10 +471,14 @@ module.exports = (io) => {
     }
 
     try {
-      await db.query(
-        "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ? AND user_role = ?",
-        [notificationId, userId, userRole]
-      );
+      const notification = await getById(COLLECTIONS.notifications, notificationId);
+      if (
+        notification &&
+        String(notification.user_id) === String(userId) &&
+        notification.user_role === userRole
+      ) {
+        await updateById(COLLECTIONS.notifications, notificationId, { is_read: 1 });
+      }
       res.json({ message: "Notification marked as read" });
     } catch (err) {
       console.error("Error marking notification read:", err);
@@ -543,37 +496,40 @@ module.exports = (io) => {
     }
 
     try {
-      const [[assignment]] = await db.query(
-        `SELECT ja.completed_at, j.title
-         FROM job_assignments ja
-         JOIN jobs j ON j.id = ja.job_id
-         WHERE ja.job_id = ? AND ja.fundi_id = ? AND j.client_id = ?`,
-        [job_id, fundi_id, client_id]
+      const [job, assignments] = await Promise.all([
+        getById(COLLECTIONS.jobs, job_id),
+        whereEqual(COLLECTIONS.jobAssignments, "job_id", job_id),
+      ]);
+      const assignment = assignments.find(
+        (item) => String(item.fundi_id) === String(fundi_id)
       );
 
-      if (!assignment?.completed_at) {
+      if (!assignment?.completed_at || String(job?.client_id) !== String(client_id)) {
         return res.status(400).json({ error: "Complete the job before reviewing it" });
       }
 
-      const [existing] = await db.query(
-        "SELECT id FROM reviews WHERE job_id = ? AND client_id = ?",
-        [job_id, client_id]
+      const existing = (await whereEqual(COLLECTIONS.reviews, "job_id", job_id)).find(
+        (review) => String(review.client_id) === String(client_id)
       );
-      if (existing.length > 0) {
+      if (existing) {
         return res.status(400).json({ error: "You already reviewed this job" });
       }
 
-      await db.query(
-        "INSERT INTO reviews (job_id, client_id, fundi_id, rating, comment) VALUES (?, ?, ?, ?, ?)",
-        [job_id, client_id, fundi_id, rating, comment || ""]
-      );
+      await addWithId(COLLECTIONS.reviews, {
+        job_id: Number(job_id),
+        client_id: Number(client_id),
+        fundi_id: Number(fundi_id),
+        rating: Number(rating),
+        comment: comment || "",
+        created_at: timestamp(),
+      });
 
       const avgRating = await updateFundiRating(fundi_id);
       await createNotification(
         fundi_id,
         "fundi",
         "rated",
-        `You received a ${rating}-star review for "${assignment.title}".`
+        `You received a ${rating}-star review for "${job.title}".`
       );
 
       res.status(201).json({ message: "Review submitted", avgRating });
@@ -585,16 +541,24 @@ module.exports = (io) => {
 
   router.get("/fundi/:fundiId/reviews", async (req, res) => {
     try {
-      const [rows] = await db.query(
-        `SELECT r.*, c.name AS client_name, j.title AS job_title
-         FROM reviews r
-         JOIN clients c ON r.client_id = c.id
-         JOIN jobs j ON r.job_id = j.id
-         WHERE r.fundi_id = ?
-         ORDER BY r.created_at DESC`,
-        [req.params.fundiId]
+      const [reviews, clients, jobs] = await Promise.all([
+        whereEqual(COLLECTIONS.reviews, "fundi_id", req.params.fundiId),
+        all(COLLECTIONS.clients),
+        all(COLLECTIONS.jobs),
+      ]);
+      const clientById = new Map(clients.map((client) => [String(client.id), client]));
+      const jobById = new Map(jobs.map((job) => [String(job.id), job]));
+
+      res.json(
+        sortByDateDesc(
+          reviews.map((review) => ({
+            ...review,
+            client_name: clientById.get(String(review.client_id))?.name,
+            job_title: jobById.get(String(review.job_id))?.title,
+          })),
+          "created_at"
+        )
       );
-      res.json(rows);
     } catch (err) {
       console.error("Error fetching reviews:", err);
       res.status(500).json({ error: "Failed to fetch reviews" });
@@ -603,9 +567,7 @@ module.exports = (io) => {
 
   router.get("/jobs/:jobId/review", async (req, res) => {
     try {
-      const [rows] = await db.query("SELECT * FROM reviews WHERE job_id = ?", [
-        req.params.jobId,
-      ]);
+      const rows = await whereEqual(COLLECTIONS.reviews, "job_id", req.params.jobId);
       res.json(rows[0] || null);
     } catch (err) {
       console.error("Error fetching job review:", err);

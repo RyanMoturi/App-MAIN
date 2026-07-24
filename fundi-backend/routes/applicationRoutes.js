@@ -1,23 +1,22 @@
 const express = require("express");
-const db = require("../db");
+const {
+  COLLECTIONS,
+  addWithId,
+  all,
+  createNotification,
+  deleteById,
+  getById,
+  sortByDateDesc,
+  timestamp,
+  updateById,
+  whereEqual,
+} = require("../firestoreStore");
 
 const router = express.Router();
 
-const createNotification = async (userId, userRole, type, content) => {
-  await db.query(
-    `INSERT INTO notifications (user_id, user_role, type, content)
-     VALUES (?, ?, ?, ?)`,
-    [userId, userRole, type, content]
-  );
-};
-
 const getAcceptedApplication = async (jobId) => {
-  const [accepted] = await db.query(
-    "SELECT id FROM applications WHERE job_id = ? AND status = 'Accepted' LIMIT 1",
-    [jobId]
-  );
-
-  return accepted[0] || null;
+  const applications = await whereEqual(COLLECTIONS.applications, "job_id", jobId);
+  return applications.find((application) => application.status === "Accepted") || null;
 };
 
 router.post("/apply", async (req, res) => {
@@ -25,40 +24,18 @@ router.post("/apply", async (req, res) => {
     const { jobId, fundiId, message } = req.body;
 
     if (!jobId || !fundiId) {
-      return res.status(400).json({
-        message: "Job ID and Fundi ID are required.",
-      });
+      return res.status(400).json({ message: "Job ID and Fundi ID are required." });
     }
 
-    const [[job]] = await db.query(
-      "SELECT id, title, client_id FROM jobs WHERE id = ?",
-      [jobId]
-    );
+    const job = await getById(COLLECTIONS.jobs, jobId);
+    if (!job) return res.status(404).json({ message: "Job not found." });
 
-    if (!job) {
-      return res.status(404).json({
-        message: "Job not found.",
-      });
+    if (await getAcceptedApplication(jobId)) {
+      return res.status(400).json({ message: "This job is already taken." });
     }
 
-    const accepted = await getAcceptedApplication(jobId);
-
-    if (accepted) {
-      return res.status(400).json({
-        message: "This job is already taken.",
-      });
-    }
-
-    const [[fundiAccount]] = await db.query(
-      "SELECT is_verified, verification_status, is_banned FROM fundis WHERE id = ?",
-      [fundiId]
-    );
-
-    if (!fundiAccount) {
-      return res.status(404).json({
-        message: "Fundi account not found.",
-      });
-    }
+    const fundiAccount = await getById(COLLECTIONS.fundis, fundiId);
+    if (!fundiAccount) return res.status(404).json({ message: "Fundi account not found." });
 
     if (!fundiAccount.is_verified) {
       return res.status(403).json({
@@ -70,221 +47,204 @@ router.post("/apply", async (req, res) => {
     }
 
     if (fundiAccount.is_banned) {
-      return res.status(403).json({
-        message: "Your fundi account has been banned by admin.",
-      });
+      return res.status(403).json({ message: "Your fundi account has been banned by admin." });
     }
 
-    const [existing] = await db.query(
-      "SELECT id FROM applications WHERE job_id = ? AND fundi_id = ?",
-      [jobId, fundiId]
+    const existing = (await whereEqual(COLLECTIONS.applications, "job_id", jobId)).find(
+      (application) => String(application.fundi_id) === String(fundiId)
     );
 
-    if (existing.length > 0) {
-      return res.status(400).json({
-        message: "You have already applied for this job.",
-      });
+    if (existing) {
+      return res.status(400).json({ message: "You have already applied for this job." });
     }
 
-    await db.query(
-      `INSERT INTO applications (job_id, fundi_id, message, status)
-       VALUES (?, ?, ?, 'Pending')`,
-      [jobId, fundiId, message || ""]
-    );
+    await addWithId(COLLECTIONS.applications, {
+      job_id: Number(jobId),
+      fundi_id: Number(fundiId),
+      message: message || "",
+      status: "Pending",
+      applied_at: timestamp(),
+    });
 
-    const [[fundi]] = await db.query("SELECT name FROM fundis WHERE id = ?", [fundiId]);
     await createNotification(
       job.client_id,
       "client",
       "application",
-      `${fundi?.name || "A fundi"} applied for "${job.title}".`
+      `${fundiAccount.name || "A fundi"} applied for "${job.title}".`
     );
 
-    res.status(201).json({
-      message: "Application submitted successfully.",
-    });
+    res.status(201).json({ message: "Application submitted successfully." });
   } catch (err) {
     console.error("Apply error:", err);
-    res.status(500).json({
-      message: "Server Error",
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
 router.get("/fundi/:id", async (req, res) => {
   try {
-    const [applications] = await db.query(
-      `SELECT
-          a.id,
-          a.job_id,
-          a.status,
-          a.message,
-          a.applied_at,
-          j.title,
-          j.description,
-          j.location,
-          j.skill_required,
-          j.created_at AS job_created_at,
-          ja.completed_at,
-          CASE
-            WHEN ja.completed_at IS NOT NULL THEN 'Completed'
-            WHEN ja.id IS NOT NULL OR accepted.id IS NOT NULL THEN 'In Progress'
-            ELSE 'Open'
-          END AS job_status,
-          CASE
-            WHEN accepted.id IS NOT NULL OR ja.id IS NOT NULL THEN 1
-            ELSE 0
-          END AS is_taken
-       FROM applications a
-       JOIN jobs j ON a.job_id = j.id
-       LEFT JOIN applications accepted
-         ON accepted.job_id = j.id
-        AND accepted.status = 'Accepted'
-       LEFT JOIN job_assignments ja
-         ON ja.job_id = j.id
-        AND ja.fundi_id = a.fundi_id
-       WHERE a.fundi_id = ?
-       ORDER BY a.applied_at DESC`,
-      [req.params.id]
-    );
+    const [applications, jobs, assignments] = await Promise.all([
+      all(COLLECTIONS.applications),
+      all(COLLECTIONS.jobs),
+      all(COLLECTIONS.jobAssignments),
+    ]);
 
-    res.json(applications);
+    const jobById = new Map(jobs.map((job) => [String(job.id), job]));
+
+    const rows = applications
+      .filter((application) => String(application.fundi_id) === String(req.params.id))
+      .map((application) => {
+        const job = jobById.get(String(application.job_id));
+        const accepted = applications.find(
+          (item) =>
+            String(item.job_id) === String(application.job_id) &&
+            item.status === "Accepted"
+        );
+        const assignment = assignments.find(
+          (item) =>
+            String(item.job_id) === String(application.job_id) &&
+            String(item.fundi_id) === String(application.fundi_id)
+        );
+
+        return {
+          id: application.id,
+          job_id: application.job_id,
+          status: application.status,
+          message: application.message,
+          applied_at: application.applied_at,
+          title: job?.title,
+          description: job?.description,
+          location: job?.location,
+          skill_required: job?.skill_required,
+          job_created_at: job?.created_at,
+          completed_at: assignment?.completed_at || null,
+          job_status: assignment?.completed_at
+            ? "Completed"
+            : assignment || accepted
+              ? "In Progress"
+              : "Open",
+          is_taken: assignment || accepted ? 1 : 0,
+        };
+      });
+
+    res.json(sortByDateDesc(rows, "applied_at"));
   } catch (err) {
     console.error("Fundi applications fetch error:", err);
-    res.status(500).json({
-      message: "Server Error",
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
 router.get("/job/:jobId", async (req, res) => {
   try {
-    const [applications] = await db.query(
-      `SELECT
-        a.id,
-        a.job_id,
-        a.status,
-        a.message,
-        a.applied_at,
-        f.id AS fundi_id,
-        f.name,
-        f.email,
-        f.phone_number,
-        f.skill,
-        f.location,
-        f.rating
-       FROM applications a
-       JOIN fundis f ON a.fundi_id = f.id
-       WHERE a.job_id = ?
-       ORDER BY
-        CASE a.status
-          WHEN 'Accepted' THEN 1
-          WHEN 'Pending' THEN 2
-          ELSE 3
-        END,
-        a.applied_at DESC`,
-      [req.params.jobId]
-    );
+    const [applications, fundis] = await Promise.all([
+      whereEqual(COLLECTIONS.applications, "job_id", req.params.jobId),
+      all(COLLECTIONS.fundis),
+    ]);
+    const fundiById = new Map(fundis.map((fundi) => [String(fundi.id), fundi]));
 
-    res.json(applications);
+    const statusOrder = { Accepted: 1, Pending: 2, Rejected: 3 };
+    const rows = applications
+      .map((application) => {
+        const fundi = fundiById.get(String(application.fundi_id)) || {};
+        return {
+          id: application.id,
+          job_id: application.job_id,
+          status: application.status,
+          message: application.message,
+          applied_at: application.applied_at,
+          fundi_id: fundi.id || application.fundi_id,
+          name: fundi.name,
+          email: fundi.email,
+          phone_number: fundi.phone_number,
+          skill: fundi.skill,
+          location: fundi.location,
+          rating: fundi.rating,
+        };
+      })
+      .sort(
+        (a, b) =>
+          (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99) ||
+          new Date(b.applied_at || 0) - new Date(a.applied_at || 0)
+      );
+
+    res.json(rows);
   } catch (err) {
     console.error("Job applications fetch error:", err);
-    res.status(500).json({
-      message: "Server Error",
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
 router.put("/:id/accept", async (req, res) => {
   try {
     const applicationId = req.params.id;
+    const application = await getById(COLLECTIONS.applications, applicationId);
 
-    const [[application]] = await db.query(
-      `SELECT a.*, j.title, j.client_id
-       FROM applications a
-       JOIN jobs j ON j.id = a.job_id
-       WHERE a.id = ?`,
-      [applicationId]
-    );
+    if (!application) return res.status(404).json({ message: "Application not found." });
 
-    if (!application) {
-      return res.status(404).json({
-        message: "Application not found.",
-      });
-    }
-
+    const job = await getById(COLLECTIONS.jobs, application.job_id);
     const accepted = await getAcceptedApplication(application.job_id);
 
     if (accepted && String(accepted.id) !== String(applicationId)) {
-      return res.status(400).json({
-        message: "This job already has an accepted fundi.",
-      });
+      return res.status(400).json({ message: "This job already has an accepted fundi." });
     }
 
-    await db.query("UPDATE applications SET status = 'Accepted' WHERE id = ?", [
-      applicationId,
-    ]);
-
-    await db.query(
-      "UPDATE applications SET status = 'Rejected' WHERE job_id = ? AND id <> ?",
-      [application.job_id, applicationId]
+    const allForJob = await whereEqual(COLLECTIONS.applications, "job_id", application.job_id);
+    await Promise.all(
+      allForJob.map((item) =>
+        updateById(COLLECTIONS.applications, item.id, {
+          status: String(item.id) === String(applicationId) ? "Accepted" : "Rejected",
+        })
+      )
     );
 
-    await db.query(
-      `INSERT INTO job_assignments (job_id, fundi_id)
-       SELECT ?, ?
-       WHERE NOT EXISTS (
-        SELECT 1 FROM job_assignments WHERE job_id = ?
-       )`,
-      [application.job_id, application.fundi_id, application.job_id]
+    const existingAssignments = await whereEqual(
+      COLLECTIONS.jobAssignments,
+      "job_id",
+      application.job_id
     );
+
+    if (!existingAssignments.length) {
+      await addWithId(COLLECTIONS.jobAssignments, {
+        job_id: Number(application.job_id),
+        fundi_id: Number(application.fundi_id),
+        assigned_at: timestamp(),
+        completed_at: null,
+      });
+    }
 
     await createNotification(
       application.fundi_id,
       "fundi",
       "application_accepted",
-      `Your application for "${application.title}" was accepted.`
+      `Your application for "${job?.title || "this job"}" was accepted.`
     );
 
     await createNotification(
-      application.client_id,
+      job.client_id,
       "client",
       "job_in_progress",
-      `"${application.title}" is now in progress.`
+      `"${job.title}" is now in progress.`
     );
 
-    res.json({
-      message: "Application accepted successfully.",
-    });
+    res.json({ message: "Application accepted successfully." });
   } catch (err) {
     console.error("Application accept error:", err);
-    res.status(500).json({
-      message: "Server Error",
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 
 router.delete("/:id", async (req, res) => {
   try {
-    const [result] = await db.query(
-      "DELETE FROM applications WHERE id = ? AND status = 'Pending'",
-      [req.params.id]
-    );
+    const application = await getById(COLLECTIONS.applications, req.params.id);
 
-    if (result.affectedRows === 0) {
-      return res.status(400).json({
-        message: "Only pending applications can be withdrawn.",
-      });
+    if (!application || application.status !== "Pending") {
+      return res.status(400).json({ message: "Only pending applications can be withdrawn." });
     }
 
-    res.json({
-      message: "Application withdrawn.",
-    });
+    await deleteById(COLLECTIONS.applications, req.params.id);
+    res.json({ message: "Application withdrawn." });
   } catch (err) {
     console.error("Application withdraw error:", err);
-    res.status(500).json({
-      message: "Server Error",
-    });
+    res.status(500).json({ message: "Server Error" });
   }
 });
 

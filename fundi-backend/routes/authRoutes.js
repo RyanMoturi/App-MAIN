@@ -2,82 +2,54 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
-const db = require("../db");
+const {
+  COLLECTIONS,
+  addWithId,
+  findOne,
+  timestamp,
+  toDataUrl,
+} = require("../firestoreStore");
+const { uploadFile } = require("../storageStore");
 require("dotenv").config();
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
-const jwtSecret = process.env.JWT_SECRET || "your_fallback_secret";
+const jwtSecret = process.env.JWT_SECRET;
+
+if (!jwtSecret) {
+  throw new Error("JWT_SECRET is required.");
+}
 const saltRounds = 10;
 
-/* ===========================================================
-   MULTER CONFIGURATION
-=========================================================== */
-
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage,
-});
-
-/* ===========================================================
-   CLIENT SIGNUP
-=========================================================== */
-
 router.post("/signup/client", async (req, res) => {
-  const {
-    name,
-    email,
-    password,
-    phone_number,
-    location,
-  } = req.body;
+  const { name, email, password, phone_number, location } = req.body;
 
   try {
-    const [existing] = await db.query(
-      "SELECT * FROM clients WHERE email = ?",
-      [email]
-    );
+    const existing = await findOne(COLLECTIONS.clients, "email", email);
 
-    if (existing.length > 0) {
-      return res.status(400).json({
-        error: "Email already exists",
-      });
+    if (existing) {
+      return res.status(400).json({ error: "Email already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(
-      password,
-      saltRounds
-    );
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    await db.query(
-      `INSERT INTO clients
-      (name,email,location,password_hash,phone_number)
-      VALUES (?,?,?,?,?)`,
-      [
-        name,
-        email,
-        location,
-        hashedPassword,
-        phone_number,
-      ]
-    );
-
-    res.status(201).json({
-      message: "Client registered successfully",
+    await addWithId(COLLECTIONS.clients, {
+      name,
+      email,
+      location,
+      password_hash: hashedPassword,
+      phone_number: phone_number ? Number(phone_number) : null,
+      profile_photo: null,
+      created_at: timestamp(),
     });
 
+    res.status(201).json({ message: "Client registered successfully" });
   } catch (err) {
     console.error(err);
-
-    res.status(500).json({
-      error: "Server error during signup",
-    });
+    res.status(500).json({ error: "Server error during signup" });
   }
 });
-/* ===========================================================
-   FUNDI SIGNUP
-=========================================================== */
 
 router.post(
   "/signup/fundi",
@@ -88,26 +60,13 @@ router.post(
     { name: "professional_certificates", maxCount: 1 },
   ]),
   async (req, res) => {
-    const {
-      name,
-      email,
-      password,
-      national_id,
-      skill,
-      bio,
-      location,
-    } = req.body;
+    const { name, email, password, national_id, skill, bio, location } = req.body;
 
     try {
-      const [existing] = await db.query(
-        "SELECT * FROM fundis WHERE email = ?",
-        [email]
-      );
+      const existing = await findOne(COLLECTIONS.fundis, "email", email);
 
-      if (existing.length > 0) {
-        return res.status(400).json({
-          error: "Email already exists",
-        });
+      if (existing) {
+        return res.status(400).json({ error: "Email already exists" });
       }
 
       if (!/^\d{6,}$/.test(national_id)) {
@@ -116,133 +75,86 @@ router.post(
         });
       }
 
-      if (
-        !req.files ||
-        !req.files.id_photo ||
-        !req.files.profile_photo
-      ) {
+      if (!req.files?.id_photo || !req.files?.profile_photo) {
         return res.status(400).json({
           error: "Both ID photo and profile photo are required.",
         });
       }
 
-      // Store the actual image bytes
-      const idPhoto = req.files.id_photo[0].buffer;
-      const profilePhoto = req.files.profile_photo[0].buffer;
-      const goodConductCertificate =
-        req.files.good_conduct_certificate?.[0]?.buffer || null;
-      const professionalCertificates =
-        req.files.professional_certificates?.[0]?.buffer || null;
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      const hashedPassword = await bcrypt.hash(
-        password,
-        saltRounds
-      );
+      const [
+        idPhotoUrl,
+        profilePhotoUrl,
+        goodConductCertificateUrl,
+        professionalCertificatesUrl,
+      ] = await Promise.all([
+        uploadFile(req.files.id_photo[0], "fundis/id-photos"),
+        uploadFile(req.files.profile_photo[0], "fundis/profile-photos"),
+        uploadFile(req.files.good_conduct_certificate?.[0], "fundis/good-conduct"),
+        uploadFile(req.files.professional_certificates?.[0], "fundis/professional-certificates"),
+      ]);
 
-      await db.query(
-        `INSERT INTO fundis
-        (
-          name,
-          email,
-          national_id,
-          id_photo,
-          profile_photo,
-          good_conduct_certificate,
-          professional_certificates,
-          skill,
-          bio,
-          location,
-          password_hash,
-          rating,
-          is_verified,
-          verification_status
-        )
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          name,
-          email,
-          national_id,
-          idPhoto,
-          profilePhoto,
-          goodConductCertificate,
-          professionalCertificates,
-          skill,
-          bio,
-          location,
-          hashedPassword,
-          5.0,
-          0,
-          "Pending",
-        ]
-      );
+      await addWithId(COLLECTIONS.fundis, {
+        name,
+        email,
+        national_id,
+        id_photo: idPhotoUrl,
+        profile_photo: profilePhotoUrl,
+        good_conduct_certificate: goodConductCertificateUrl,
+        professional_certificates: professionalCertificatesUrl,
+        skill,
+        bio,
+        location,
+        password_hash: hashedPassword,
+        rating: 5.0,
+        phone_number: null,
+        is_verified: 0,
+        verification_status: "Pending",
+        verification_note: null,
+        is_flagged: 0,
+        is_banned: 0,
+        created_at: timestamp(),
+      });
 
       res.status(201).json({
         message: "Fundi registered successfully. Your account is pending admin verification.",
       });
-
     } catch (err) {
       console.error(err);
-
-      res.status(500).json({
-        error: "Server error during signup",
-      });
+      res.status(500).json({ error: "Server error during signup" });
     }
   }
 );
-/* ===========================================================
-   LOGIN
-=========================================================== */
 
 router.post("/login", async (req, res) => {
   const { email, password, role } = req.body;
 
   if (!["client", "fundi", "admin"].includes(role)) {
-    return res.status(400).json({
-      error: "Invalid role specified",
-    });
+    return res.status(400).json({ error: "Invalid role specified" });
   }
 
-  let table = "";
-
-  if (role === "client") table = "clients";
-  if (role === "fundi") table = "fundis";
-  if (role === "admin") table = "admins";
+  const collection =
+    role === "client"
+      ? COLLECTIONS.clients
+      : role === "fundi"
+        ? COLLECTIONS.fundis
+        : COLLECTIONS.admins;
 
   try {
-    const [rows] = await db.query(
-      `SELECT * FROM ${table} WHERE email = ?`,
-      [email]
-    );
+    const user = await findOne(collection, "email", email);
 
-    if (!rows.length) {
-      return res.status(401).json({
-        error: "User not found",
-      });
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
     }
 
-    const user = rows[0];
-
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
+    const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
-      return res.status(401).json({
-        error: "Invalid password",
-      });
+      return res.status(401).json({ error: "Invalid password" });
     }
 
-    const token = jwt.sign(
-      {
-        id: user.id,
-        role,
-      },
-      jwtSecret,
-      {
-        expiresIn: "7d",
-      }
-    );
+    const token = jwt.sign({ id: user.id, role }, jwtSecret, { expiresIn: "7d" });
 
     const response = {
       message: "Login successful",
@@ -262,7 +174,6 @@ router.post("/login", async (req, res) => {
     }
 
     if (role === "fundi") {
-
       response.fundiId = user.id;
       response.user.name = user.name;
       response.user.location = user.location;
@@ -273,15 +184,8 @@ router.post("/login", async (req, res) => {
       response.user.is_verified = Boolean(user.is_verified);
       response.user.verification_status = user.verification_status;
       response.user.verification_note = user.verification_note;
-
-      // Convert BLOB images to Base64 strings
-      response.user.id_photo = user.id_photo
-        ? user.id_photo.toString("base64")
-        : null;
-
-      response.user.profile_photo = user.profile_photo
-        ? user.profile_photo.toString("base64")
-        : null;
+      response.user.id_photo = toDataUrl(user.id_photo);
+      response.user.profile_photo = toDataUrl(user.profile_photo);
     }
 
     if (role === "admin") {
@@ -291,13 +195,9 @@ router.post("/login", async (req, res) => {
     }
 
     res.json(response);
-
   } catch (err) {
     console.error(err);
-
-    res.status(500).json({
-      error: "Server error during login",
-    });
+    res.status(500).json({ error: "Server error during login" });
   }
 });
 

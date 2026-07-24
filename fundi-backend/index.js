@@ -26,12 +26,18 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  return /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
+};
+
 app.use(express.json());
 app.set("trust proxy", 1);
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
       return callback(new Error("Origin not allowed by CORS"));
@@ -91,6 +97,13 @@ const io = new Server(server, {
 });
 
 app.use("/api", require("./featureRoutes")(io));
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(err.status || 500).json({
+    error: err.message || "Server error",
+  });
+});
 
 io.on("connection", (socket) => {
   socket.on("join", ({ userId, userRole }) => {

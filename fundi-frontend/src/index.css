@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.location-autocomplete-host {
+  min-height: 50px;
+  overflow: visible;
+}
+
+.location-autocomplete-host.google-input-compact {
+  min-height: 42px;
+}
+
+gmp-place-autocomplete.google-place-autocomplete {
+  width: 100%;
+  min-height: 48px;
+  color: #111827;
+  color-scheme: light;
+}

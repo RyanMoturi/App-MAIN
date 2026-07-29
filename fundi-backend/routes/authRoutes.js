@@ -10,6 +10,7 @@ const {
   toDataUrl,
 } = require("../firestoreStore");
 const { uploadFile } = require("../storageStore");
+const { locationFields } = require("../locationUtils");
 require("dotenv").config();
 
 const router = express.Router();
@@ -23,7 +24,7 @@ if (!jwtSecret) {
 const saltRounds = 10;
 
 router.post("/signup/client", async (req, res) => {
-  const { name, email, password, phone_number, location } = req.body;
+  const { name, email, password, phone_number } = req.body;
 
   try {
     const existing = await findOne(COLLECTIONS.clients, "email", email);
@@ -37,7 +38,7 @@ router.post("/signup/client", async (req, res) => {
     await addWithId(COLLECTIONS.clients, {
       name,
       email,
-      location,
+      ...locationFields(req.body),
       password_hash: hashedPassword,
       phone_number: phone_number ? Number(phone_number) : null,
       profile_photo: null,
@@ -60,7 +61,7 @@ router.post(
     { name: "professional_certificates", maxCount: 1 },
   ]),
   async (req, res) => {
-    const { name, email, password, national_id, skill, bio, location } = req.body;
+    const { name, email, password, national_id, skill, bio } = req.body;
 
     try {
       const existing = await findOne(COLLECTIONS.fundis, "email", email);
@@ -105,7 +106,7 @@ router.post(
         professional_certificates: professionalCertificatesUrl,
         skill,
         bio,
-        location,
+        ...locationFields(req.body),
         password_hash: hashedPassword,
         rating: 5.0,
         phone_number: null,
@@ -170,6 +171,10 @@ router.post("/login", async (req, res) => {
       response.clientId = user.id;
       response.user.name = user.name;
       response.user.location = user.location;
+      response.user.apartment = user.apartment || "";
+      response.user.latitude = user.latitude ?? null;
+      response.user.longitude = user.longitude ?? null;
+      response.user.place_id = user.place_id || "";
       response.user.phone_number = user.phone_number;
     }
 
@@ -177,6 +182,10 @@ router.post("/login", async (req, res) => {
       response.fundiId = user.id;
       response.user.name = user.name;
       response.user.location = user.location;
+      response.user.apartment = user.apartment || "";
+      response.user.latitude = user.latitude ?? null;
+      response.user.longitude = user.longitude ?? null;
+      response.user.place_id = user.place_id || "";
       response.user.skill = user.skill;
       response.user.bio = user.bio;
       response.user.rating = user.rating;

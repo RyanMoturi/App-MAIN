@@ -5,6 +5,12 @@ import { formatTimeAgo } from "../utils/timeAgo";
 import MessagesPanel from "../components/MessagesPanel";
 import FundiProfile from "../components/FundiProfile";
 import { MenuIcon } from "../components/Icons";
+import LocationAutocomplete from "../components/LocationAutocomplete";
+import {
+  getBrowserLocation,
+  hasCoordinates,
+  savedAccountLocation,
+} from "../utils/location";
 
 const TABS = [
   "My Jobs",
@@ -31,6 +37,9 @@ const ClientDashboard = () => {
   const [loadingFundis, setLoadingFundis] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [location, setLocation] = useState("");
+  const [searchOrigin, setSearchOrigin] = useState(savedAccountLocation);
+  const [locationStatus, setLocationStatus] = useState("");
+  const [locating, setLocating] = useState(false);
   const [selectedFundiId, setSelectedFundiId] = useState(null);
   const [contactFundi, setContactFundi] = useState(null);
   const [pendingChat, setPendingChat] = useState(null);
@@ -45,6 +54,10 @@ const ClientDashboard = () => {
     email: "",
     phone_number: "",
     location: "",
+    apartment: "",
+    latitude: null,
+    longitude: null,
+    place_id: "",
     profile_photo: "",
   });
   const [editingProfile, setEditingProfile] = useState(false);
@@ -88,7 +101,8 @@ const ClientDashboard = () => {
 
   const fetchFundis = async (
     category = "All",
-    searchLocation = ""
+    searchLocation = "",
+    origin = searchOrigin
   ) => {
     setLoadingFundis(true);
 
@@ -101,7 +115,10 @@ const ClientDashboard = () => {
         params.append("category", category);
       }
 
-      if (searchLocation.trim() !== "") {
+      if (hasCoordinates(origin)) {
+        params.append("latitude", String(origin.latitude));
+        params.append("longitude", String(origin.longitude));
+      } else if (searchLocation.trim() !== "") {
         params.append("location", searchLocation);
       }
 
@@ -121,6 +138,35 @@ const ClientDashboard = () => {
     }
 
     setLoadingFundis(false);
+  };
+
+  const findNearestFundis = async (
+    category = selectedCategory,
+    searchLocation = location
+  ) => {
+    setLocating(true);
+    setLocationStatus("Finding your current location…");
+
+    let origin = savedAccountLocation();
+
+    try {
+      origin = await getBrowserLocation();
+      setLocationStatus("Sorted nearest to your current location.");
+    } catch (error) {
+      if (origin) {
+        setLocationStatus("Sorted nearest to your saved account address.");
+      } else {
+        setLocationStatus(
+          "Allow location access or choose an address to sort by distance."
+        );
+      }
+      console.info("Live location was not available.", error);
+    } finally {
+      setLocating(false);
+    }
+
+    setSearchOrigin(origin);
+    await fetchFundis(category, searchLocation, origin);
   };
 
   const fetchNotifications = async () => {
@@ -164,7 +210,11 @@ const ClientDashboard = () => {
     if (!clientId) return;
 
     try {
-      const res = await fetch(`/api/client/${clientId}/profile`);
+      const res = await fetch(`/api/client/${clientId}/profile`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setClientProfile({
@@ -172,6 +222,10 @@ const ClientDashboard = () => {
           email: data.email || "",
           phone_number: data.phone_number || "",
           location: data.location || "",
+          apartment: data.apartment || "",
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
+          place_id: data.place_id || "",
           profile_photo: data.profile_photo || "",
         });
       }
@@ -188,6 +242,10 @@ const ClientDashboard = () => {
     formData.append("email", clientProfile.email);
     formData.append("phone_number", clientProfile.phone_number || "");
     formData.append("location", clientProfile.location || "");
+    formData.append("apartment", clientProfile.apartment || "");
+    formData.append("latitude", String(clientProfile.latitude ?? ""));
+    formData.append("longitude", String(clientProfile.longitude ?? ""));
+    formData.append("place_id", clientProfile.place_id || "");
 
     if (newProfilePhoto) {
       formData.append("profile_photo", newProfilePhoto);
@@ -198,6 +256,9 @@ const ClientDashboard = () => {
     try {
       const res = await fetch(`/api/client/${clientId}/profile`, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
         body: formData,
       });
       const data = await res.json();
@@ -207,6 +268,19 @@ const ClientDashboard = () => {
       localStorage.setItem("name", clientProfile.name);
       localStorage.setItem("email", clientProfile.email);
       localStorage.setItem("location", clientProfile.location);
+      localStorage.setItem("apartment", clientProfile.apartment || "");
+
+      if (hasCoordinates(clientProfile)) {
+        localStorage.setItem("latitude", String(clientProfile.latitude));
+        localStorage.setItem("longitude", String(clientProfile.longitude));
+        setSearchOrigin({
+          latitude: Number(clientProfile.latitude),
+          longitude: Number(clientProfile.longitude),
+        });
+      } else {
+        localStorage.removeItem("latitude");
+        localStorage.removeItem("longitude");
+      }
 
       alert(data.message);
       setEditingProfile(false);
@@ -225,7 +299,7 @@ const ClientDashboard = () => {
     }
 
     if (activeTab === "Find Fundis") {
-      fetchFundis(selectedCategory, location);
+      findNearestFundis(selectedCategory, location);
     }
 
     if (activeTab === "Notifications") {
@@ -235,7 +309,7 @@ const ClientDashboard = () => {
     if (activeTab === "Profile") {
       fetchClientProfile();
     }
-  }, [activeTab]);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
@@ -380,55 +454,95 @@ const ClientDashboard = () => {
 
           {/* Search Filters */}
 
-          <div className="bg-white rounded-lg shadow p-4 mb-6 flex flex-wrap gap-4">
+          <div className="mb-6 rounded-lg bg-white p-4 shadow">
+            <div className="grid gap-4 lg:grid-cols-[220px_minmax(280px,1fr)_auto_auto]">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="rounded border px-4 py-2"
+              >
+                <option value="All">All Categories</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Carpentry">Carpentry</option>
+                <option value="Painting">Painting</option>
+                <option value="Cleaning">Cleaning</option>
+                <option value="Roofing">Roofing</option>
+                <option value="Welding">Welding</option>
+                <option value="Masonry">Masonry</option>
+              </select>
 
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="border rounded px-4 py-2"
-            >
-              <option value="All">All Categories</option>
-              <option value="Plumbing">Plumbing</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Carpentry">Carpentry</option>
-              <option value="Painting">Painting</option>
-              <option value="Cleaning">Cleaning</option>
-              <option value="Roofing">Roofing</option>
-              <option value="Welding">Welding</option>
-              <option value="Masonry">Masonry</option>
-            </select>
+              <LocationAutocomplete
+                id="fundi-search-location"
+                value={location}
+                onTextChange={(address) => {
+                  setLocation(address);
+                  setSearchOrigin(null);
+                  setLocationStatus(
+                    "Choose an address suggestion to search around that area."
+                  );
+                }}
+                onPlaceSelect={(place) => {
+                  const origin = {
+                    latitude: place.latitude,
+                    longitude: place.longitude,
+                  };
+                  setLocation(place.address);
+                  setSearchOrigin(origin);
+                  setLocationStatus(`Searching near ${place.address}.`);
+                }}
+                bias={savedAccountLocation()}
+                placeholder="Search around an address or building"
+                className="w-full rounded border bg-white"
+              />
 
-            <input
-              type="text"
-              placeholder="Search by location..."
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="border rounded px-4 py-2 flex-1"
-            />
+              <button
+                type="button"
+                onClick={() =>
+                  fetchFundis(selectedCategory, location, searchOrigin)
+                }
+                className="rounded bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
+              >
+                Search
+              </button>
 
-            <button
-              onClick={() =>
-                fetchFundis(
-                  selectedCategory,
-                  location
-                )
-              }
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded"
-            >
-              Search
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLocation("");
+                  findNearestFundis(selectedCategory, "");
+                }}
+                disabled={locating}
+                className="rounded bg-gray-900 px-5 py-2 text-white hover:bg-black disabled:opacity-60"
+              >
+                {locating ? "Locating…" : "Near me"}
+              </button>
+            </div>
 
-            <button
-              onClick={() => {
-                setSelectedCategory("All");
-                setLocation("");
-                fetchFundis("All", "");
-              }}
-              className="bg-gray-300 hover:bg-gray-400 px-5 py-2 rounded"
-            >
-              Clear
-            </button>
-
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-gray-600">
+                {locationStatus ||
+                  "Results use your current or saved account location."}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const origin = savedAccountLocation();
+                  setSelectedCategory("All");
+                  setLocation("");
+                  setSearchOrigin(origin);
+                  setLocationStatus(
+                    origin
+                      ? "Sorted nearest to your saved account address."
+                      : ""
+                  );
+                  fetchFundis("All", "", origin);
+                }}
+                className="text-sm font-semibold text-blue-700 hover:underline"
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
 
           {loadingFundis ? (
@@ -477,6 +591,14 @@ const ClientDashboard = () => {
                   <p className="text-gray-500 mt-3">
                     📍 {fundi.location}
                   </p>
+
+                  {fundi.distance_km != null && (
+                    <p className="mt-2 inline-flex rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800">
+                      {fundi.distance_km < 1
+                        ? `${Math.round(fundi.distance_km * 1000)} m away`
+                        : `${fundi.distance_km.toFixed(1)} km away`}
+                    </p>
+                  )}
 
                   <p className="text-gray-600 mt-3">
                     {fundi.bio || "No bio available."}
@@ -696,16 +818,58 @@ const ClientDashboard = () => {
                 Location
               </label>
 
+              {editingProfile ? (
+                <LocationAutocomplete
+                  id="profile-location"
+                  value={clientProfile.location}
+                  onTextChange={(address) =>
+                    setClientProfile((previous) => ({
+                      ...previous,
+                      location: address,
+                      latitude: null,
+                      longitude: null,
+                      place_id: "",
+                    }))
+                  }
+                  onPlaceSelect={(place) =>
+                    setClientProfile((previous) => ({
+                      ...previous,
+                      location: place.address,
+                      latitude: place.latitude,
+                      longitude: place.longitude,
+                      place_id: place.placeId,
+                    }))
+                  }
+                  bias={clientProfile}
+                  className="w-full rounded border bg-white"
+                  required
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={clientProfile.location}
+                  readOnly
+                  className="w-full rounded border bg-gray-100 px-4 py-2"
+                />
+              )}
+            </div>
+
+            <div className="mb-5">
+              <label className="block font-semibold mb-2">
+                Apartment, house or floor
+              </label>
+
               <input
                 type="text"
-                value={clientProfile.location}
+                value={clientProfile.apartment}
                 readOnly={!editingProfile}
                 onChange={(e) =>
                   setClientProfile({
                     ...clientProfile,
-                    location: e.target.value,
+                    apartment: e.target.value,
                   })
                 }
+                placeholder="e.g. Apt B12, 3rd floor"
                 className={`w-full border rounded px-4 py-2 ${
                   editingProfile ? "bg-white" : "bg-gray-100"
                 }`}

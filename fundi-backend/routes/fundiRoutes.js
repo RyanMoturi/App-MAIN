@@ -1,4 +1,5 @@
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const {
   COLLECTIONS,
@@ -9,9 +10,41 @@ const {
   updateById,
 } = require("../firestoreStore");
 const { uploadFile } = require("../storageStore");
+const {
+  distanceInKilometres,
+  hasCoordinates,
+  locationFields,
+} = require("../locationUtils");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+const requireFundiOwner = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Token missing" });
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (
+      user.role !== "fundi" ||
+      String(user.id) !== String(req.params.id)
+    ) {
+      return res.status(403).json({ error: "This profile is private" });
+    }
+
+    req.user = user;
+    next();
+  } catch (_error) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+};
 
 const publicFundi = (fundi) => ({
   id: fundi.id,
@@ -30,7 +63,9 @@ const matches = (value, search) =>
 
 router.get("/", async (req, res) => {
   try {
-    const { category, skill, location } = req.query;
+    const { category, skill, location, latitude, longitude } = req.query;
+    const origin = { latitude, longitude };
+    const rankByDistance = hasCoordinates(origin);
     let fundis = await all(COLLECTIONS.fundis);
 
     if (category && category !== "All") {
@@ -41,12 +76,39 @@ router.get("/", async (req, res) => {
       fundis = fundis.filter((fundi) => matches(fundi.skill, skill));
     }
 
-    if (location) {
+    if (location && !rankByDistance) {
       fundis = fundis.filter((fundi) => matches(fundi.location, location));
     }
 
-    fundis.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
-    res.json(fundis.map(publicFundi));
+    const ranked = fundis.map((fundi) => ({
+      fundi,
+      distance: rankByDistance
+        ? distanceInKilometres(origin, fundi)
+        : null,
+    }));
+
+    ranked.sort((a, b) => {
+      if (rankByDistance) {
+        const aHasDistance = Number.isFinite(a.distance);
+        const bHasDistance = Number.isFinite(b.distance);
+
+        if (aHasDistance !== bHasDistance) return aHasDistance ? -1 : 1;
+        if (aHasDistance && a.distance !== b.distance) {
+          return a.distance - b.distance;
+        }
+      }
+
+      return Number(b.fundi.rating || 0) - Number(a.fundi.rating || 0);
+    });
+
+    res.json(
+      ranked.map(({ fundi, distance }) => ({
+        ...publicFundi(fundi),
+        distance_km: Number.isFinite(distance)
+          ? Math.round(distance * 10) / 10
+          : null,
+      }))
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load fundis" });
@@ -132,7 +194,7 @@ router.get("/:id/completed-jobs", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/me/:id", requireFundiOwner, async (req, res) => {
   try {
     const fundi = await getById(COLLECTIONS.fundis, req.params.id);
 
@@ -144,8 +206,34 @@ router.get("/:id", async (req, res) => {
     res.json({
       ...safeFundi,
       profile_photo: toDataUrl(fundi.profile_photo),
-      good_conduct_certificate: toDataUrl(fundi.good_conduct_certificate, "application/octet-stream"),
-      professional_certificates: toDataUrl(fundi.professional_certificates, "application/octet-stream"),
+      good_conduct_certificate: toDataUrl(
+        fundi.good_conduct_certificate,
+        "application/octet-stream"
+      ),
+      professional_certificates: toDataUrl(
+        fundi.professional_certificates,
+        "application/octet-stream"
+      ),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.get("/:id", async (req, res) => {
+  try {
+    const fundi = await getById(COLLECTIONS.fundis, req.params.id);
+
+    if (!fundi) {
+      return res.status(404).json({ error: "Fundi not found" });
+    }
+
+    res.json({
+      ...publicFundi(fundi),
+      profile_photo: toDataUrl(fundi.profile_photo),
+      is_verified: Boolean(fundi.is_verified),
+      verification_status: fundi.verification_status,
     });
   } catch (err) {
     console.error(err);
@@ -155,6 +243,7 @@ router.get("/:id", async (req, res) => {
 
 router.put(
   "/:id",
+  requireFundiOwner,
   upload.fields([
     { name: "profile_photo", maxCount: 1 },
     { name: "good_conduct_certificate", maxCount: 1 },
@@ -162,7 +251,7 @@ router.put(
   ]),
   async (req, res) => {
     try {
-      const { name, email, location, skill, bio, phone_number } = req.body;
+      const { name, email, skill, bio, phone_number } = req.body;
       const fundi = await getById(COLLECTIONS.fundis, req.params.id);
 
       if (!fundi) {
@@ -172,7 +261,7 @@ router.put(
       const update = {
         name,
         email,
-        location,
+        ...locationFields(req.body),
         skill,
         bio,
         phone_number: phone_number ? Number(phone_number) : null,

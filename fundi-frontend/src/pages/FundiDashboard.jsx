@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { formatTimeAgo } from "../utils/timeAgo";
 import MessagesPanel from "../components/MessagesPanel";
 import { MenuIcon } from "../components/Icons";
+import LocationAutocomplete from "../components/LocationAutocomplete";
+import { hasCoordinates } from "../utils/location";
 
 
 const TABS = [
@@ -39,6 +41,10 @@ const FundiDashboard = () => {
     name: "",
     email: "",
     location: "",
+    apartment: "",
+    latitude: null,
+    longitude: null,
+    place_id: "",
     skill: "",
     bio: "",
     national_id: "",
@@ -105,8 +111,11 @@ const FundiDashboard = () => {
   const fetchProfile = async () => {
     try {
       const fundiId = localStorage.getItem("fundiId");
+      const token = localStorage.getItem("token");
 
-      const res = await fetch(`/api/fundi/${fundiId}`);
+      const res = await fetch(`/api/fundi/me/${fundiId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const data = await res.json();
 
@@ -235,6 +244,10 @@ const FundiDashboard = () => {
       formData.append("name", profile.name);
       formData.append("email", profile.email);
       formData.append("location", profile.location);
+      formData.append("apartment", profile.apartment || "");
+      formData.append("latitude", String(profile.latitude ?? ""));
+      formData.append("longitude", String(profile.longitude ?? ""));
+      formData.append("place_id", profile.place_id || "");
       formData.append("skill", profile.skill);
       formData.append("bio", profile.bio);
       formData.append("phone_number", profile.phone_number || "");
@@ -253,6 +266,9 @@ const FundiDashboard = () => {
 
       const res = await fetch(`/api/fundi/${fundiId}`, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
         body: formData,
       });
 
@@ -265,6 +281,14 @@ const FundiDashboard = () => {
       localStorage.setItem("name", profile.name);
       localStorage.setItem("email", profile.email);
       localStorage.setItem("location", profile.location);
+      localStorage.setItem("apartment", profile.apartment || "");
+      if (hasCoordinates(profile)) {
+        localStorage.setItem("latitude", String(profile.latitude));
+        localStorage.setItem("longitude", String(profile.longitude));
+      } else {
+        localStorage.removeItem("latitude");
+        localStorage.removeItem("longitude");
+      }
       localStorage.setItem("skill", profile.skill);
       localStorage.setItem("bio", profile.bio);
 
@@ -753,13 +777,54 @@ const FundiDashboard = () => {
 
       <div className="mb-5">
         <label className="block font-semibold mb-2">Location</label>
+        {editingProfile ? (
+          <LocationAutocomplete
+            id="fundi-profile-location"
+            value={profile.location || ""}
+            onTextChange={(address) =>
+              setProfile((previous) => ({
+                ...previous,
+                location: address,
+                latitude: null,
+                longitude: null,
+                place_id: "",
+              }))
+            }
+            onPlaceSelect={(place) =>
+              setProfile((previous) => ({
+                ...previous,
+                location: place.address,
+                latitude: place.latitude,
+                longitude: place.longitude,
+                place_id: place.placeId,
+              }))
+            }
+            bias={profile}
+            className="w-full rounded border bg-white"
+            required
+          />
+        ) : (
+          <input
+            type="text"
+            value={profile.location || ""}
+            readOnly
+            className="w-full rounded border bg-gray-100 px-4 py-2"
+          />
+        )}
+      </div>
+
+      <div className="mb-5">
+        <label className="block font-semibold mb-2">
+          Apartment, house or floor
+        </label>
         <input
           type="text"
-          value={profile.location || ""}
+          value={profile.apartment || ""}
           readOnly={!editingProfile}
           onChange={(e) =>
-            setProfile({ ...profile, location: e.target.value })
+            setProfile({ ...profile, apartment: e.target.value })
           }
+          placeholder="e.g. Apt B12, 3rd floor"
           className={`w-full border rounded px-4 py-2 ${
             editingProfile ? "bg-white" : "bg-gray-100"
           }`}

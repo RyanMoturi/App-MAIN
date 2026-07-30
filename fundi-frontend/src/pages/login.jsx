@@ -44,6 +44,14 @@ const Login = () => {
           localStorage.setItem("name", data.user.name);
           localStorage.setItem("email", data.user.email);
           localStorage.setItem("location", data.user.location);
+          localStorage.setItem("apartment", data.user.apartment || "");
+          if (data.user.latitude != null && data.user.longitude != null) {
+            localStorage.setItem("latitude", String(data.user.latitude));
+            localStorage.setItem("longitude", String(data.user.longitude));
+          } else {
+            localStorage.removeItem("latitude");
+            localStorage.removeItem("longitude");
+          }
         }
 
         if (formData.role === "fundi" && data.fundiId) {
@@ -52,6 +60,14 @@ const Login = () => {
           localStorage.setItem("name", data.user.name);
           localStorage.setItem("email", data.user.email);
           localStorage.setItem("location", data.user.location);
+          localStorage.setItem("apartment", data.user.apartment || "");
+          if (data.user.latitude != null && data.user.longitude != null) {
+            localStorage.setItem("latitude", String(data.user.latitude));
+            localStorage.setItem("longitude", String(data.user.longitude));
+          } else {
+            localStorage.removeItem("latitude");
+            localStorage.removeItem("longitude");
+          }
           localStorage.setItem("skill", data.user.skill);
           localStorage.setItem("bio", data.user.bio);
           localStorage.setItem("rating", data.user.rating);

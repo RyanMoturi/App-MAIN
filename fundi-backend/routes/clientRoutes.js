@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const {
   COLLECTIONS,
@@ -13,10 +14,38 @@ const {
   updateById,
 } = require("../firestoreStore");
 const { uploadFile } = require("../storageStore");
+const { locationFields } = require("../locationUtils");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 const saltRounds = 10;
+
+const requireClientOwner = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Token missing" });
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (
+      user.role !== "client" ||
+      String(user.id) !== String(req.params.clientId)
+    ) {
+      return res.status(403).json({ error: "This profile is private" });
+    }
+
+    req.user = user;
+    next();
+  } catch (_error) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+};
 
 const buildClientJobs = async (clientId) => {
   const [jobs, applications, assignments, fundis] = await Promise.all([
@@ -60,7 +89,7 @@ const buildClientJobs = async (clientId) => {
 };
 
 router.post("/signup", async (req, res) => {
-  const { name, email, password, location, phone_number } = req.body;
+  const { name, email, password, phone_number } = req.body;
 
   if (!password) {
     return res.status(400).json({ error: "Password is required" });
@@ -78,7 +107,7 @@ router.post("/signup", async (req, res) => {
     await addWithId(COLLECTIONS.clients, {
       name,
       email,
-      location,
+      ...locationFields(req.body),
       password_hash: hashedPassword,
       phone_number: phone_number ? Number(phone_number) : null,
       profile_photo: null,
@@ -101,7 +130,7 @@ router.get("/:clientId/jobs", async (req, res) => {
   }
 });
 
-router.get("/:clientId/profile", async (req, res) => {
+router.get("/:clientId/profile", requireClientOwner, async (req, res) => {
   try {
     const client = await getById(COLLECTIONS.clients, req.params.clientId);
 
@@ -120,9 +149,13 @@ router.get("/:clientId/profile", async (req, res) => {
   }
 });
 
-router.put("/:clientId/profile", upload.single("profile_photo"), async (req, res) => {
+router.put(
+  "/:clientId/profile",
+  requireClientOwner,
+  upload.single("profile_photo"),
+  async (req, res) => {
   try {
-    const { name, email, location, phone_number } = req.body;
+    const { name, email, phone_number } = req.body;
     const client = await getById(COLLECTIONS.clients, req.params.clientId);
 
     if (!client) {
@@ -132,7 +165,7 @@ router.put("/:clientId/profile", upload.single("profile_photo"), async (req, res
     const update = {
       name,
       email,
-      location,
+      ...locationFields(req.body),
       phone_number: phone_number ? Number(phone_number) : null,
     };
 
@@ -146,6 +179,7 @@ router.put("/:clientId/profile", upload.single("profile_photo"), async (req, res
     console.error(err);
     res.status(500).json({ error: "Failed to update client profile" });
   }
-});
+  }
+);
 
 module.exports = router;

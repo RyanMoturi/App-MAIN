@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import LocationAutocomplete from "../components/LocationAutocomplete";
+import { hasGoogleMapsKey } from "../utils/googleMaps";
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -11,6 +13,10 @@ const Signup = () => {
     email: "",
     password: "",
     location: "",
+    apartment: "",
+    latitude: null,
+    longitude: null,
+    place_id: "",
     phone_number: "",
 
     skill: "",
@@ -42,6 +48,15 @@ const Signup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (
+      hasGoogleMapsKey() &&
+      (!Number.isFinite(formData.latitude) ||
+        !Number.isFinite(formData.longitude))
+    ) {
+      alert("Please choose your address from the Google suggestions.");
+      return;
+    }
+
     try {
       let response;
 
@@ -60,6 +75,10 @@ const Signup = () => {
               password: formData.password,
               phone_number: formData.phone_number,
               location: formData.location,
+              apartment: formData.apartment,
+              latitude: formData.latitude,
+              longitude: formData.longitude,
+              place_id: formData.place_id,
             }),
           }
         );
@@ -78,6 +97,10 @@ const Signup = () => {
         data.append("email", formData.email);
         data.append("password", formData.password);
         data.append("location", formData.location);
+        data.append("apartment", formData.apartment);
+        data.append("latitude", String(formData.latitude ?? ""));
+        data.append("longitude", String(formData.longitude ?? ""));
+        data.append("place_id", formData.place_id);
         data.append("skill", formData.skill);
         data.append("bio", formData.bio);
         data.append("national_id", formData.national_id);
@@ -181,15 +204,63 @@ const Signup = () => {
             required
           />
 
-          <input
-            type="text"
-            name="location"
-            placeholder="Location"
-            value={formData.location}
-            onChange={handleChange}
-            className="w-full p-3 border rounded"
-            required
-          />
+          <div>
+            <label
+              htmlFor="signup-location"
+              className="mb-2 block text-sm font-medium text-gray-700"
+            >
+              Your address
+            </label>
+            <LocationAutocomplete
+              id="signup-location"
+              value={formData.location}
+              onTextChange={(location) =>
+                setFormData((previous) => ({
+                  ...previous,
+                  location,
+                  latitude: null,
+                  longitude: null,
+                  place_id: "",
+                }))
+              }
+              onPlaceSelect={(place) =>
+                setFormData((previous) => ({
+                  ...previous,
+                  location: place.address,
+                  latitude: place.latitude,
+                  longitude: place.longitude,
+                  place_id: place.placeId,
+                }))
+              }
+              placeholder="Start typing your building, road or estate"
+              className="w-full rounded border bg-white"
+              required
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Pick a suggestion so nearby fundis and jobs can be ordered
+              accurately.
+            </p>
+          </div>
+
+          <div>
+            <label
+              htmlFor="signup-apartment"
+              className="mb-2 block text-sm font-medium text-gray-700"
+            >
+              Apartment, house or floor{" "}
+              <span className="font-normal text-gray-500">(optional)</span>
+            </label>
+            <input
+              id="signup-apartment"
+              type="text"
+              name="apartment"
+              placeholder="e.g. Green Court, Apt B12, 3rd floor"
+              value={formData.apartment}
+              onChange={handleChange}
+              autoComplete="address-line2"
+              className="w-full p-3 border rounded"
+            />
+          </div>
 
           <input
             type="password"

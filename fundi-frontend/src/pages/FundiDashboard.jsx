@@ -166,7 +166,12 @@ const FundiDashboard = () => {
       const fundiId = localStorage.getItem("fundiId");
 
       const res = await fetch(
-        `/api/applications/fundi/${fundiId}`
+        `/api/applications/fundi/${fundiId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
       );
 
       const data = await res.json();
@@ -257,6 +262,20 @@ const FundiDashboard = () => {
     });
 
     fetchNotifications();
+  };
+
+  const directionsUrl = (job) => {
+    const destination =
+      job.client_latitude != null && job.client_longitude != null
+        ? `${job.client_latitude},${job.client_longitude}`
+        : [job.client_apartment, job.client_location].filter(Boolean).join(", ");
+    const params = new URLSearchParams({
+      api: "1",
+      destination,
+      travelmode: "driving",
+    });
+    if (job.client_place_id) params.set("destination_place_id", job.client_place_id);
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
   };
 
   const openNotification = async (notification) => {
@@ -753,6 +772,17 @@ const FundiDashboard = () => {
           <li
             key={note.id}
           >
+            <div className="flex flex-wrap gap-2">
+            {(job.client_location || (job.client_latitude != null && job.client_longitude != null)) && (
+              <a
+                href={directionsUrl(job)}
+                target="_blank"
+                rel="noreferrer"
+                className="secondary-action px-4 py-2"
+              >
+                Get directions
+              </a>
+            )}
             <button
               type="button"
               onClick={() => openNotification(note)}
@@ -777,6 +807,7 @@ const FundiDashboard = () => {
               )}
               <span className="text-xl text-gray-300 transition group-hover:translate-x-1 group-hover:text-green-700">→</span>
             </button>
+            </div>
           </li>
         ))}
       </ul>

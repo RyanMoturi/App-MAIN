@@ -19,6 +19,7 @@ const JobDetails = () => {
   const [agreedPrice, setAgreedPrice] = useState('');
   const [paymentPhone, setPaymentPhone] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [existingReview, setExistingReview] = useState(null);
   const [submittingReport, setSubmittingReport] = useState(false);
   const [review, setReview] = useState({
     rating: '5',
@@ -77,9 +78,15 @@ const JobDetails = () => {
     setApplications(Array.isArray(appData) ? appData : []);
   };
 
+  const fetchReview = async () => {
+    const reviewRes = await fetch(`/api/jobs/${id}/review`);
+    if (reviewRes.ok) setExistingReview(await reviewRes.json());
+  };
+
   useEffect(() => {
     fetchJob();
     fetchApplications();
+    fetchReview();
   }, [id]);
 
   useEffect(() => {
@@ -232,7 +239,10 @@ const JobDetails = () => {
     try {
       const res = await fetch('/api/reviews', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
         body: JSON.stringify({
           job_id: Number(id),
           client_id: Number(clientId),
@@ -251,6 +261,7 @@ const JobDetails = () => {
       setReview({ rating: '5', comment: '' });
       await fetchJob();
       await fetchApplications();
+      await fetchReview();
     } catch (err) {
       alert(err.message || 'Failed to submit review.');
     } finally {
@@ -559,7 +570,25 @@ const JobDetails = () => {
             </div>
           )}
 
-          {isOwner && job.status === 'Completed' && acceptedApplication && (
+          {isOwner && job.status === 'Completed' && acceptedApplication && existingReview && (
+            <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-black text-green-950">Your submitted review</h3>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-green-800">Final</span>
+              </div>
+              <p className="mt-1 text-sm text-green-900">
+                Reviews are locked after submission to preserve an honest work history.
+              </p>
+              <div className="mt-4">
+                <StarRating value={Number(existingReview.rating)} readOnly size="lg" showLabel />
+              </div>
+              {existingReview.comment && (
+                <p className="mt-3 rounded-xl bg-white p-4 text-sm text-gray-700">{existingReview.comment}</p>
+              )}
+            </div>
+          )}
+
+          {isOwner && job.status === 'Completed' && acceptedApplication && !existingReview && (
             <form
               onSubmit={handleSubmitReview}
               className="mt-5 border-t pt-4 space-y-3"

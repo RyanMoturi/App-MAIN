@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import GoogleSignIn from '../components/GoogleSignIn';
+import { dashboardForRole, saveAuthSession } from '../utils/authSession';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -35,63 +37,8 @@ const Login = () => {
         : { error: await response.text() };
 
       if (response.ok) {
-        localStorage.setItem("userId", data.user.id);
-
-        // Store IDs depending on role
-        if (formData.role === "client" && data.clientId) {
-          localStorage.setItem("clientId", data.clientId);
-
-          localStorage.setItem("name", data.user.name);
-          localStorage.setItem("email", data.user.email);
-          localStorage.setItem("location", data.user.location);
-          localStorage.setItem("apartment", data.user.apartment || "");
-          if (data.user.latitude != null && data.user.longitude != null) {
-            localStorage.setItem("latitude", String(data.user.latitude));
-            localStorage.setItem("longitude", String(data.user.longitude));
-          } else {
-            localStorage.removeItem("latitude");
-            localStorage.removeItem("longitude");
-          }
-        }
-
-        if (formData.role === "fundi" && data.fundiId) {
-          localStorage.setItem("fundiId", data.fundiId);
-
-          localStorage.setItem("name", data.user.name);
-          localStorage.setItem("email", data.user.email);
-          localStorage.setItem("location", data.user.location);
-          localStorage.setItem("apartment", data.user.apartment || "");
-          if (data.user.latitude != null && data.user.longitude != null) {
-            localStorage.setItem("latitude", String(data.user.latitude));
-            localStorage.setItem("longitude", String(data.user.longitude));
-          } else {
-            localStorage.removeItem("latitude");
-            localStorage.removeItem("longitude");
-          }
-          localStorage.setItem("skill", data.user.skill);
-          localStorage.setItem("bio", data.user.bio);
-          localStorage.setItem("rating", data.user.rating);
-          localStorage.setItem("is_verified", data.user.is_verified ? "1" : "0");
-          localStorage.setItem("verification_status", data.user.verification_status || "Pending");
-        }
-        if (formData.role === 'admin' && data.adminId) {
-          localStorage.setItem('adminId', data.adminId);
-        }
-
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('role', formData.role);
-
-        window.dispatchEvent(new Event('authChanged'));
-
-        alert('Login successful!');
-
-        if (formData.role === 'client') {
-          navigate('/client-dashboard');
-        } else if (formData.role === 'fundi') {
-          navigate('/fundi-dashboard');
-        } else {
-          navigate('/admin-dashboard');
-        }
+        saveAuthSession(data, formData.role);
+        navigate(dashboardForRole(formData.role));
 
       } else {
         alert(data.error || `Login failed with status ${response.status}`);
@@ -150,6 +97,17 @@ const Login = () => {
           </button>
 
         </div>
+
+        {formData.role !== 'admin' && (
+          <>
+            <GoogleSignIn role={formData.role} />
+            <div className="my-5 flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-gray-400">
+              <span className="h-px flex-1 bg-gray-200" />
+              or use email
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
 

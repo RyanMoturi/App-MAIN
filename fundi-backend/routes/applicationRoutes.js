@@ -13,6 +13,7 @@ const {
 } = require("../firestoreStore");
 
 const router = express.Router();
+const { authenticate } = require("../authMiddleware");
 
 const getAcceptedApplication = async (jobId) => {
   const applications = await whereEqual(COLLECTIONS.applications, "job_id", jobId);
@@ -81,15 +82,20 @@ router.post("/apply", async (req, res) => {
   }
 });
 
-router.get("/fundi/:id", async (req, res) => {
+router.get("/fundi/:id", authenticate, async (req, res) => {
+  if (req.user.role !== "fundi" || String(req.user.id) !== String(req.params.id)) {
+    return res.status(403).json({ message: "You can only view your own applications" });
+  }
   try {
-    const [applications, jobs, assignments] = await Promise.all([
+    const [applications, jobs, assignments, clients] = await Promise.all([
       all(COLLECTIONS.applications),
       all(COLLECTIONS.jobs),
       all(COLLECTIONS.jobAssignments),
+      all(COLLECTIONS.clients),
     ]);
 
     const jobById = new Map(jobs.map((job) => [String(job.id), job]));
+    const clientById = new Map(clients.map((client) => [String(client.id), client]));
 
     const rows = applications
       .filter((application) => String(application.fundi_id) === String(req.params.id))
@@ -105,6 +111,11 @@ router.get("/fundi/:id", async (req, res) => {
             String(item.job_id) === String(application.job_id) &&
             String(item.fundi_id) === String(application.fundi_id)
         );
+        const client = job ? clientById.get(String(job.client_id)) : null;
+        const canViewClientLocation =
+          application.status === "Accepted" &&
+          assignment &&
+          String(assignment.fundi_id) === String(req.user.id);
 
         return {
           id: application.id,
@@ -115,6 +126,11 @@ router.get("/fundi/:id", async (req, res) => {
           title: job?.title,
           description: job?.description,
           location: job?.location,
+          client_location: canViewClientLocation ? client?.location || "" : null,
+          client_apartment: canViewClientLocation ? client?.apartment || "" : null,
+          client_latitude: canViewClientLocation ? client?.latitude ?? null : null,
+          client_longitude: canViewClientLocation ? client?.longitude ?? null : null,
+          client_place_id: canViewClientLocation ? client?.place_id || "" : null,
           skill_required: job?.skill_required,
           budget_type: job?.budget_type || "negotiable",
           budget_amount: job?.budget_amount ?? null,

@@ -16,12 +16,13 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "firebase-admin": "^14.1.0",
+    "google-auth-library": "^10.3.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.1",
     "socket.io": "^4.8.1"
   },
-  "description": ""
-  ,"engines": {
+  "description": "",
+  "engines": {
     "node": ">=20 <23"
   }
 }

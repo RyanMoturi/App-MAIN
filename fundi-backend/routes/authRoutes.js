@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
 const multer = require("multer");
 const {
   COLLECTIONS,
@@ -8,6 +9,7 @@ const {
   findOne,
   timestamp,
   toDataUrl,
+  updateById,
 } = require("../firestoreStore");
 const { uploadFile } = require("../storageStore");
 const { locationFields } = require("../locationUtils");
@@ -22,6 +24,111 @@ if (!jwtSecret) {
   throw new Error("JWT_SECRET is required.");
 }
 const saltRounds = 10;
+const googleClient = new OAuth2Client();
+
+const createLoginResponse = (user, role) => {
+  const token = jwt.sign({ id: user.id, role }, jwtSecret, { expiresIn: "7d" });
+  const response = {
+    message: "Login successful",
+    token,
+    user: { id: user.id, email: user.email, role, name: user.name },
+  };
+
+  if (role === "client") {
+    response.clientId = user.id;
+    Object.assign(response.user, {
+      location: user.location || "",
+      apartment: user.apartment || "",
+      latitude: user.latitude ?? null,
+      longitude: user.longitude ?? null,
+      place_id: user.place_id || "",
+      phone_number: user.phone_number || null,
+    });
+  } else if (role === "fundi") {
+    response.fundiId = user.id;
+    Object.assign(response.user, {
+      location: user.location || "",
+      apartment: user.apartment || "",
+      latitude: user.latitude ?? null,
+      longitude: user.longitude ?? null,
+      place_id: user.place_id || "",
+      skill: user.skill,
+      bio: user.bio,
+      rating: user.rating,
+      national_id: user.national_id,
+      is_verified: Boolean(user.is_verified),
+      verification_status: user.verification_status,
+      verification_note: user.verification_note,
+      id_photo: toDataUrl(user.id_photo),
+      profile_photo: toDataUrl(user.profile_photo),
+    });
+  }
+
+  return response;
+};
+
+router.post("/google", async (req, res) => {
+  const { credential, role = "client" } = req.body;
+  const googleClientId = process.env.GOOGLE_WEB_CLIENT_ID;
+
+  if (!googleClientId) {
+    return res.status(503).json({ error: "Google sign-in is not configured yet" });
+  }
+  if (!credential || !["client", "fundi"].includes(role)) {
+    return res.status(400).json({ error: "Invalid Google sign-in request" });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: googleClientId,
+    });
+    const profile = ticket.getPayload();
+    if (!profile?.sub || !profile.email || !profile.email_verified) {
+      return res.status(401).json({ error: "Google could not verify this email" });
+    }
+
+    const collection = role === "client" ? COLLECTIONS.clients : COLLECTIONS.fundis;
+    let user =
+      (await findOne(collection, "google_id", profile.sub)) ||
+      (await findOne(collection, "email", profile.email.toLowerCase()));
+
+    if (!user && role === "fundi") {
+      return res.status(409).json({
+        error: "Create your fundi profile first so we can complete the required identity verification.",
+      });
+    }
+
+    if (!user) {
+      user = await addWithId(collection, {
+        google_id: profile.sub,
+        auth_provider: "google",
+        name: profile.name || profile.email.split("@")[0],
+        email: profile.email.toLowerCase(),
+        profile_photo: profile.picture || null,
+        location: "",
+        apartment: "",
+        latitude: null,
+        longitude: null,
+        place_id: "",
+        phone_number: null,
+        created_at: timestamp(),
+      });
+    } else if (!user.google_id) {
+      await updateById(collection, user.id, {
+        google_id: profile.sub,
+        auth_provider: user.auth_provider || "password_and_google",
+        profile_photo: user.profile_photo || profile.picture || null,
+      });
+      user = { ...user, google_id: profile.sub };
+    }
+
+    res.json(createLoginResponse(user, role));
+  } catch (err) {
+    console.error("Google sign-in error:", err);
+    res.status(401).json({ error: "Google sign-in could not be verified" });
+  }
+});
 
 router.post("/signup/client", async (req, res) => {
   const { name, email, password, phone_number } = req.body;
@@ -147,6 +254,10 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ error: "User not found" });
+    }
+
+    if (!user.password_hash) {
+      return res.status(401).json({ error: "Use Continue with Google for this account" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);

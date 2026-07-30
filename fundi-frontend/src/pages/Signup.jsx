@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import LocationAutocomplete from "../components/LocationAutocomplete";
+import GoogleSignIn from "../components/GoogleSignIn";
 import { hasGoogleMapsKey } from "../utils/googleMaps";
 import {
   getBrowserLocation,
@@ -196,6 +197,24 @@ const Signup = () => {
           </button>
 
         </div>
+
+        {role === "client" ? (
+          <>
+            <GoogleSignIn role="client" label="signup_with" />
+            <p className="mt-2 text-center text-xs text-gray-500">
+              Google creates your client account instantly. Add your address from your profile afterward.
+            </p>
+            <div className="my-5 flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-gray-400">
+              <span className="h-px flex-1 bg-gray-200" />
+              or create manually
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+          </>
+        ) : (
+          <p className="mb-5 rounded-xl bg-green-50 p-3 text-center text-sm text-green-900">
+            Fundi profiles require identity and qualification details. After approval, you can also use Google to sign in.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
 

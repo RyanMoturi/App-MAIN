@@ -11,6 +11,7 @@ const {
   updateById,
   whereEqual,
 } = require("./firestoreStore");
+const { authenticate } = require("./authMiddleware");
 
 const matches = (value, search) =>
   String(value || "").toLowerCase().includes(String(search || "").toLowerCase());
@@ -504,10 +505,13 @@ module.exports = (io) => {
     }
   });
 
-  router.post("/reviews", async (req, res) => {
+  router.post("/reviews", authenticate, async (req, res) => {
     const { job_id, client_id, fundi_id, rating, comment } = req.body;
     if (!job_id || !client_id || !fundi_id || !rating) {
       return res.status(400).json({ error: "Missing required review fields" });
+    }
+    if (req.user.role !== "client" || String(req.user.id) !== String(client_id)) {
+      return res.status(403).json({ error: "Only the job's client can submit this review" });
     }
     if (Number(rating) < 1 || Number(rating) > 5) {
       return res.status(400).json({ error: "Rating must be between 1 and 5" });

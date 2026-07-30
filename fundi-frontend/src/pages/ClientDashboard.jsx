@@ -406,6 +406,20 @@ const ClientDashboard = () => {
                         {job.description}
                       </p>
 
+                      <p className="mt-2 text-sm font-semibold text-gray-700">
+                        Budget:{" "}
+                        {job.budget_type === "fixed" && job.budget_amount
+                          ? `KES ${Number(job.budget_amount).toLocaleString()}`
+                          : "Negotiable"}
+                      </p>
+
+                      {job.agreed_price && (
+                        <p className="mt-1 text-sm text-gray-700">
+                          Agreed price: KES{" "}
+                          {Number(job.agreed_price).toLocaleString()}
+                        </p>
+                      )}
+
                       <p className="text-sm text-gray-500 mt-2">
                         {formatTimeAgo(job.created_at)}
                       </p>

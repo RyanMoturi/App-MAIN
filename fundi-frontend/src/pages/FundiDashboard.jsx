@@ -35,6 +35,7 @@ const FundiDashboard = () => {
   const [portfolio, setPortfolio] = useState([]);
   const [completedJobs, setCompletedJobs] = useState([]);
   const [applyingJobId, setApplyingJobId] = useState(null);
+  const [finishingJobId, setFinishingJobId] = useState(null);
   const [editingProfile, setEditingProfile] = useState(false);
 
   const [profile, setProfile] = useState({
@@ -193,6 +194,29 @@ const FundiDashboard = () => {
       }
     } catch (err) {
       console.log(err);
+    }
+  };
+
+  const requestJobCompletion = async (jobId) => {
+    setFinishingJobId(jobId);
+    try {
+      const res = await fetch(`/api/payments/jobs/${jobId}/request-completion`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not mark the work as finished.");
+      }
+      alert(data.message);
+      await fetchApplications();
+      await fetchNotifications();
+    } catch (error) {
+      alert(error.message || "Could not mark the work as finished.");
+    } finally {
+      setFinishingJobId(null);
     }
   };
 
@@ -414,6 +438,13 @@ const FundiDashboard = () => {
                     Skill Required: {job.skill_required}
                   </p>
 
+                  <p className="mt-1 text-sm font-semibold text-gray-700">
+                    Budget:{" "}
+                    {job.budget_type === "fixed" && job.budget_amount
+                      ? `KES ${Number(job.budget_amount).toLocaleString()}`
+                      : "Negotiable"}
+                  </p>
+
                   <p
                     className={`mt-2 text-sm font-semibold ${
                       isTaken ? "text-red-600" : "text-green-600"
@@ -577,21 +608,40 @@ const FundiDashboard = () => {
         {activeJobs.map((job) => (
           <li
             key={job.id}
-            className="bg-white p-4 rounded shadow flex justify-between items-center"
+            className="bg-white p-4 rounded shadow flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center"
           >
             <div>
               <h3 className="font-bold">{job.title}</h3>
               <p className="text-gray-600">{job.location}</p>
               <p className="text-sm text-green-600 mt-1">
-                Status: Active
+                Status: {job.job_status || "In Progress"}
+              </p>
+              <p className="mt-1 text-sm text-gray-700">
+                Agreed price:{" "}
+                {job.agreed_price
+                  ? `KES ${Number(job.agreed_price).toLocaleString()}`
+                  : "Waiting for client"}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 {formatTimeAgo(job.job_created_at)}
               </p>
             </div>
 
-            <button className="bg-blue-600 text-white px-3 py-2 rounded">
-              View
+            <button
+              type="button"
+              disabled={
+                finishingJobId === job.job_id ||
+                Boolean(job.completion_requested_at) ||
+                job.payment_status === "Pending"
+              }
+              onClick={() => requestJobCompletion(job.job_id)}
+              className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-600"
+            >
+              {job.completion_requested_at
+                ? "Payment requested"
+                : finishingJobId === job.job_id
+                  ? "Notifying client..."
+                  : "Mark work finished"}
             </button>
           </li>
         ))}

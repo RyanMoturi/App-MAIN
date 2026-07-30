@@ -115,10 +115,19 @@ router.get("/fundi/:id", async (req, res) => {
           description: job?.description,
           location: job?.location,
           skill_required: job?.skill_required,
+          budget_type: job?.budget_type || "negotiable",
+          budget_amount: job?.budget_amount ?? null,
           job_created_at: job?.created_at,
           completed_at: assignment?.completed_at || null,
+          agreed_price: assignment?.agreed_price ?? null,
+          completion_requested_at: assignment?.completion_requested_at || null,
+          payment_status: assignment?.payment_status || "Not started",
           job_status: assignment?.completed_at
             ? "Completed"
+            : assignment?.payment_status === "Pending"
+              ? "Payment Pending"
+              : assignment?.completion_requested_at
+                ? "Awaiting Payment"
             : assignment || accepted
               ? "In Progress"
               : "Open",
@@ -208,6 +217,11 @@ router.put("/:id/accept", async (req, res) => {
         fundi_id: Number(application.fundi_id),
         assigned_at: timestamp(),
         completed_at: null,
+        completion_requested_at: null,
+        agreed_price: null,
+        price_set_at: null,
+        payment_status: "Not started",
+        paid_at: null,
       });
     }
 

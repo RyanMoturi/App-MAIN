@@ -182,6 +182,9 @@ router.get("/:id/completed-jobs", async (req, res) => {
           created_at: job?.created_at,
           assigned_at: assignment.assigned_at,
           completed_at: assignment.completed_at,
+          agreed_price: assignment.agreed_price ?? null,
+          payment_status: assignment.payment_status || "Not started",
+          paid_at: assignment.paid_at || null,
           rating: review?.rating || null,
           comment: review?.comment || null,
         };

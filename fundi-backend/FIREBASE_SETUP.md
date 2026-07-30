@@ -32,6 +32,7 @@ The app uses these Firestore collections:
 - `job_requests`
 - `messages`
 - `notifications`
+- `payments`
 - `portfolio`
 - `reviews`
 - `reports`

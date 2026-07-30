@@ -13,7 +13,10 @@ const JobDetails = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [acceptingId, setAcceptingId] = useState(null);
-  const [completing, setCompleting] = useState(false);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [agreedPrice, setAgreedPrice] = useState('');
+  const [paymentPhone, setPaymentPhone] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
   const [review, setReview] = useState({
@@ -29,6 +32,8 @@ const JobDetails = () => {
     description: '',
     skillRequired: '',
     location: '',
+    budgetType: 'fixed',
+    budgetAmount: '',
     image: null,
   });
 
@@ -48,11 +53,14 @@ const JobDetails = () => {
       if (!res.ok) throw new Error('Job not found');
       const data = await res.json();
       setJob(data);
+      setAgreedPrice(data.agreed_price ? String(data.agreed_price) : '');
       setFormData({
         title: data.title || '',
         description: data.description || '',
         skillRequired: data.skill_required || '',
         location: data.location || '',
+        budgetType: data.budget_type || 'negotiable',
+        budgetAmount: data.budget_amount ? String(data.budget_amount) : '',
         image: null,
       });
     } catch {
@@ -73,6 +81,13 @@ const JobDetails = () => {
     fetchApplications();
   }, [id]);
 
+  useEffect(() => {
+    if (job?.payment_status !== 'Pending') return undefined;
+
+    const interval = window.setInterval(fetchJob, 5000);
+    return () => window.clearInterval(interval);
+  }, [job?.payment_status]);
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
     if (name === 'image') {
@@ -91,6 +106,8 @@ const JobDetails = () => {
       data.append('description', formData.description);
       data.append('skillRequired', formData.skillRequired);
       data.append('location', formData.location);
+      data.append('budgetType', formData.budgetType);
+      data.append('budgetAmount', formData.budgetAmount);
       data.append('clientId', clientId);
       if (formData.image) data.append('image', formData.image);
 
@@ -155,28 +172,49 @@ const JobDetails = () => {
     }
   };
 
-  const handleCompleteJob = async () => {
-    setCompleting(true);
-
+  const handleSaveAgreedPrice = async (e) => {
+    e.preventDefault();
+    setSavingPrice(true);
     try {
-      const res = await fetch(`/api/jobs/${id}/complete`, {
+      const res = await fetch(`/api/payments/jobs/${id}/agreed-price`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ price: Number(agreedPrice) }),
       });
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to complete job.');
-      }
-
+      if (!res.ok) throw new Error(data.error || 'Failed to save price.');
       alert(data.message);
       await fetchJob();
-      await fetchApplications();
     } catch (err) {
-      alert(err.message || 'Failed to complete job.');
+      alert(err.message || 'Failed to save price.');
     } finally {
-      setCompleting(false);
+      setSavingPrice(false);
+    }
+  };
+
+  const handlePay = async (e) => {
+    e.preventDefault();
+    setPaying(true);
+    try {
+      const res = await fetch(`/api/payments/jobs/${id}/stk-push`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ phone: paymentPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start M-PESA payment.');
+      alert(data.message);
+      await fetchJob();
+    } catch (err) {
+      alert(err.message || 'Could not start M-PESA payment.');
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -336,6 +374,44 @@ const JobDetails = () => {
             required
             className="w-full border p-2 rounded"
           />
+          <fieldset className="rounded border p-3">
+            <legend className="px-1 text-sm font-semibold">Budget</legend>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="budgetType"
+                  value="fixed"
+                  checked={formData.budgetType === 'fixed'}
+                  onChange={handleChange}
+                />
+                Fixed
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="budgetType"
+                  value="negotiable"
+                  checked={formData.budgetType === 'negotiable'}
+                  onChange={handleChange}
+                />
+                Negotiable
+              </label>
+            </div>
+            {formData.budgetType === 'fixed' && (
+              <input
+                type="number"
+                name="budgetAmount"
+                min="1"
+                step="1"
+                value={formData.budgetAmount}
+                onChange={handleChange}
+                placeholder="Budget in KES"
+                required
+                className="mt-3 w-full rounded border p-2"
+              />
+            )}
+          </fieldset>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Replace image (optional)</label>
             <input
@@ -379,6 +455,14 @@ const JobDetails = () => {
               <span className="font-semibold text-gray-800">Location:</span>
               <p className="text-gray-600">{job.location}</p>
             </div>
+            <div>
+              <span className="font-semibold text-gray-800">Budget:</span>
+              <p className="text-gray-600">
+                {job.budget_type === 'fixed' && job.budget_amount
+                  ? `KES ${Number(job.budget_amount).toLocaleString()}`
+                  : 'Negotiable'}
+              </p>
+            </div>
           </div>
           <p
             className={`mt-4 text-sm font-semibold ${
@@ -394,14 +478,83 @@ const JobDetails = () => {
             </p>
           )}
 
-          {isOwner && job.status === 'In Progress' && (
-            <button
-              onClick={handleCompleteJob}
-              disabled={completing}
-              className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-            >
-              {completing ? 'Completing...' : 'Mark Job Completed'}
-            </button>
+          {isOwner && acceptedApplication && job.status !== 'Completed' && (
+            <div className="mt-5 rounded-lg border border-green-200 bg-green-50 p-4">
+              <h3 className="font-semibold text-gray-900">Price and payment</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Enter the final amount after you and the fundi agree.
+              </p>
+
+              <form
+                onSubmit={handleSaveAgreedPrice}
+                className="mt-3 flex flex-col gap-2 sm:flex-row"
+              >
+                <div className="flex-1">
+                  <label className="mb-1 block text-xs font-semibold text-gray-600">
+                    Agreed price (KES)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={agreedPrice}
+                    onChange={(e) => setAgreedPrice(e.target.value)}
+                    disabled={job.payment_status === 'Pending'}
+                    required
+                    className="w-full rounded border bg-white p-2"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingPrice || job.payment_status === 'Pending'}
+                  className="self-end rounded bg-gray-900 px-4 py-2 text-white disabled:opacity-50"
+                >
+                  {savingPrice ? 'Saving...' : 'Save agreed price'}
+                </button>
+              </form>
+
+              <p className="mt-3 text-sm font-medium text-gray-700">
+                Payment status: {job.payment_status || 'Not started'}
+              </p>
+
+              {job.completion_requested_at &&
+                job.payment_status !== 'Paid' &&
+                job.payment_status !== 'Pending' && (
+                  <form onSubmit={handlePay} className="mt-4 border-t pt-4">
+                    <p className="mb-3 text-sm font-semibold text-green-800">
+                      The fundi has marked the work as finished. Pay KES{' '}
+                      {Number(job.agreed_price).toLocaleString()} via M-PESA.
+                    </p>
+                    <label className="mb-1 block text-xs font-semibold text-gray-600">
+                      Safaricom phone number
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="tel"
+                        value={paymentPhone}
+                        onChange={(e) => setPaymentPhone(e.target.value)}
+                        placeholder="0712345678"
+                        required
+                        className="flex-1 rounded border bg-white p-2"
+                      />
+                      <button
+                        type="submit"
+                        disabled={paying}
+                        className="rounded bg-green-600 px-5 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {paying ? 'Sending prompt...' : 'Pay with M-PESA'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+              {job.payment_status === 'Pending' && (
+                <p className="mt-4 rounded bg-amber-100 p-3 text-sm text-amber-900">
+                  M-PESA prompt sent. Complete it on your phone; this page will
+                  update automatically.
+                </p>
+              )}
+            </div>
           )}
 
           {isOwner && job.status === 'Completed' && acceptedApplication && (

@@ -18,6 +18,25 @@ const router = express.Router();
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const budgetFields = (source = {}) => {
+  const budgetType =
+    source.budgetType === "fixed" || source.budget_type === "fixed"
+      ? "fixed"
+      : "negotiable";
+  const amount = Number(source.budgetAmount ?? source.budget_amount);
+
+  if (budgetType === "fixed" && (!Number.isFinite(amount) || amount < 1)) {
+    const error = new Error("Enter a valid budget of at least KES 1");
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    budget_type: budgetType,
+    budget_amount: budgetType === "fixed" ? Math.round(amount) : null,
+  };
+};
+
 const buildJobRows = async (filter = () => true) => {
   const [jobs, applications, assignments, fundis] = await Promise.all([
     all(COLLECTIONS.jobs),
@@ -44,6 +63,10 @@ const buildJobRows = async (filter = () => true) => {
         ...job,
         status: assignment?.completed_at
           ? "Completed"
+          : assignment?.payment_status === "Pending"
+            ? "Payment Pending"
+            : assignment?.completion_requested_at
+              ? "Awaiting Payment"
           : accepted || assignment
             ? "In Progress"
             : "Open",
@@ -51,6 +74,11 @@ const buildJobRows = async (filter = () => true) => {
         accepted_fundi_id: accepted?.fundi_id || assignment?.fundi_id || null,
         accepted_fundi_name: acceptedFundi?.name || null,
         completed_at: assignment?.completed_at || null,
+        agreed_price: assignment?.agreed_price ?? null,
+        price_set_at: assignment?.price_set_at || null,
+        completion_requested_at: assignment?.completion_requested_at || null,
+        payment_status: assignment?.payment_status || "Not started",
+        paid_at: assignment?.paid_at || null,
       };
     }),
     "created_at"
@@ -67,6 +95,7 @@ router.post("/jobs", upload.single("image"), async (req, res) => {
       description,
       location,
       skill_required: skillRequired,
+      ...budgetFields(req.body),
       client_id: Number(clientId),
       image_url,
       created_at: timestamp(),
@@ -131,6 +160,7 @@ router.put("/jobs/:id", upload.single("image"), async (req, res) => {
       description,
       location,
       skill_required: skillRequired,
+      ...budgetFields(req.body),
       image_url: req.file ? await uploadFile(req.file, "jobs/images") : existing.image_url,
     });
 
@@ -142,52 +172,10 @@ router.put("/jobs/:id", upload.single("image"), async (req, res) => {
 });
 
 router.put("/jobs/:id/complete", async (req, res) => {
-  const { id } = req.params;
-  const { clientId } = req.body;
-
-  try {
-    const job = await getById(COLLECTIONS.jobs, id);
-    if (!job) return res.status(404).json({ error: "Job not found" });
-
-    if (String(job.client_id) !== String(clientId)) {
-      return res.status(403).json({ error: "Not authorized to complete this job" });
-    }
-
-    const assignments = await whereEqual(COLLECTIONS.jobAssignments, "job_id", id);
-    const assignment = assignments[0];
-
-    if (!assignment) {
-      return res.status(400).json({ error: "This job has not been assigned yet" });
-    }
-
-    if (!assignment.completed_at) {
-      await updateById(COLLECTIONS.jobAssignments, assignment.id, {
-        completed_at: timestamp(),
-      });
-    }
-
-    await createNotification(
-      assignment.fundi_id,
-      "fundi",
-      "job_completed",
-      `"${job.title}" was marked as completed.`
-    );
-
-    await createNotification(
-      job.client_id,
-      "client",
-      "job_completed",
-      `You marked "${job.title}" as completed. Please rate the fundi.`
-    );
-
-    res.json({
-      message: "Job marked as completed. Please rate the fundi.",
-      fundiId: assignment.fundi_id,
-    });
-  } catch (err) {
-    console.error("Error completing job:", err);
-    res.status(500).json({ error: "Failed to complete job" });
-  }
+  res.status(410).json({
+    error:
+      "The assigned fundi must mark the work as finished, then the client completes payment.",
+  });
 });
 
 router.delete("/jobs/:id", async (req, res) => {

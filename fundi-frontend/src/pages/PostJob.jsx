@@ -11,6 +11,8 @@ const PostJob = ({ onSubmit }) => {
     description: '',
     skillRequired: '',
     location: '',
+    budgetType: 'fixed',
+    budgetAmount: '',
     image: null
   });
 
@@ -39,6 +41,8 @@ const PostJob = ({ onSubmit }) => {
     data.append('description', formData.description);
     data.append('skillRequired', formData.skillRequired);
     data.append('location', formData.location);
+    data.append('budgetType', formData.budgetType);
+    data.append('budgetAmount', formData.budgetAmount);
     data.append('clientId', clientId);
     if (formData.image) data.append('image', formData.image);
 
@@ -59,6 +63,8 @@ const PostJob = ({ onSubmit }) => {
         description: '',
         skillRequired: '',
         location: '',
+        budgetType: 'fixed',
+        budgetAmount: '',
         image: null
       });
     } else {
@@ -130,6 +136,51 @@ const PostJob = ({ onSubmit }) => {
             required
             className="w-full border p-2 rounded"
           />
+          <fieldset className="rounded border p-3">
+            <legend className="px-1 text-sm font-semibold text-gray-700">
+              Job budget
+            </legend>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="budgetType"
+                  value="fixed"
+                  checked={formData.budgetType === 'fixed'}
+                  onChange={handleChange}
+                />
+                Set a budget
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="budgetType"
+                  value="negotiable"
+                  checked={formData.budgetType === 'negotiable'}
+                  onChange={handleChange}
+                />
+                Negotiable
+              </label>
+            </div>
+            {formData.budgetType === 'fixed' && (
+              <div className="mt-3">
+                <label className="mb-1 block text-sm text-gray-600">
+                  Budget amount (KES)
+                </label>
+                <input
+                  type="number"
+                  name="budgetAmount"
+                  min="1"
+                  step="1"
+                  value={formData.budgetAmount}
+                  onChange={handleChange}
+                  placeholder="e.g. 5000"
+                  required
+                  className="w-full rounded border p-2"
+                />
+              </div>
+            )}
+          </fieldset>
           <input
             type="file"
             name="image"

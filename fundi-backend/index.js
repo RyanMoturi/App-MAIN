@@ -11,6 +11,7 @@ const adminRoutes = require("./routes/adminRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const portfolioRoutes = require("./portfolioRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 const SECRET_KEY = process.env.JWT_SECRET;
@@ -81,6 +82,7 @@ app.use("/api/client", clientRoutes);
 app.use("/api/fundi", fundiRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/applications", applicationRoutes);
+app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api", portfolioRoutes);
 app.use("/uploads", express.static("uploads"));

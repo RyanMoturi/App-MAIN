@@ -35,6 +35,11 @@ const ensureAssignmentForApplication = async (application) => {
     fundi_id: Number(application.fundi_id),
     assigned_at: timestamp(),
     completed_at: null,
+    completion_requested_at: null,
+    agreed_price: null,
+    price_set_at: null,
+    payment_status: "Not started",
+    paid_at: null,
   });
 };
 

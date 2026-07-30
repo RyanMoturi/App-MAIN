@@ -15,6 +15,7 @@ const COLLECTIONS = {
   portfolio: "portfolio",
   reviews: "reviews",
   reports: "reports",
+  payments: "payments",
 };
 
 const timestamp = () => Timestamp.now();

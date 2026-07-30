@@ -1,5 +1,19 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 
+const Initials = ({ name = 'FundiLink' }) => (
+  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-green-600 to-emerald-800 text-sm font-black text-white shadow-sm">
+    {name.split(' ').slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
+  </span>
+);
+
+const displayTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
   const userRole = localStorage.getItem('role');
   const userId =
@@ -158,53 +172,81 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
   };
 
   return (
-    <div className="grid md:grid-cols-3 gap-4 min-h-[400px]">
-      <div className="md:col-span-1 bg-white rounded shadow">
-        <div className="p-3 border-b font-semibold">Conversations</div>
+    <div className="surface-card grid min-h-[620px] overflow-hidden lg:grid-cols-[340px_1fr]">
+      <aside className="border-b border-gray-200 bg-stone-50/80 lg:border-b-0 lg:border-r">
+        <div className="border-b border-gray-200 p-5">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Inbox</p>
+          <div className="mt-1 flex items-center justify-between">
+            <h3 className="text-xl font-black text-gray-950">Conversations</h3>
+            <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-800">
+              {conversations.length}
+            </span>
+          </div>
+        </div>
         {loading ? (
-          <div className="p-4 text-gray-500 text-sm">Loading...</div>
+          <div className="p-6 text-sm text-gray-500">Loading conversations...</div>
         ) : conversations.length === 0 ? (
-          <div className="p-4 text-gray-500 text-sm">No conversations yet. Message a fundi from Find Fundis.</div>
+          <div className="m-5 rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-green-50 text-2xl">💬</div>
+            <p className="mt-4 font-bold text-gray-900">No conversations yet</p>
+            <p className="mt-1 text-sm leading-6 text-gray-500">
+              {userRole === 'client' ? 'Open Find Fundis and start a conversation.' : 'Messages from clients will appear here.'}
+            </p>
+          </div>
         ) : (
-          <ul className="divide-y max-h-96 overflow-y-auto">
+          <ul className="max-h-[520px] space-y-1 overflow-y-auto p-3">
             {conversations.map((conv) => (
               <li key={`${conv.job_id}-${conv.other_user_role}-${conv.other_user_id}`}>
                 <button
                   onClick={() => handleSelectConversation(conv)}
-                  className={`w-full text-left p-3 hover:bg-gray-50 ${
+                  className={`w-full rounded-2xl p-3 text-left transition hover:bg-white hover:shadow-sm ${
                     activeChat &&
                     !activeChat.isNew &&
                     String(activeChat.job_id) === String(conv.job_id) &&
                     String(activeChat.other_user_id) === String(conv.other_user_id)
-                      ? 'bg-blue-50'
+                      ? 'bg-white shadow-sm ring-1 ring-green-200'
                       : ''
                   }`}
                 >
-                  <div className="font-medium text-sm">{conv.other_user_name}</div>
-                  <div className="text-xs text-gray-500">{conv.job_title}</div>
-                  <div className="text-xs text-gray-600 truncate mt-1">{conv.last_message}</div>
+                  <div className="flex gap-3">
+                    <Initials name={conv.other_user_name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-black text-gray-950">{conv.other_user_name}</span>
+                        <span className="text-[10px] font-medium text-gray-400">{displayTime(conv.last_message_at)}</span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs font-semibold text-green-700">{conv.job_title}</div>
+                      <div className="mt-1 truncate text-xs text-gray-500">{conv.last_message}</div>
+                    </div>
+                  </div>
                 </button>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </aside>
 
-      <div className="md:col-span-2 bg-white rounded shadow flex flex-col">
+      <section className="flex min-w-0 flex-col bg-white">
         {!activeChat ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 p-8">
-            Select a conversation or message a fundi to get started.
+          <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-[1.75rem] bg-gray-950 text-3xl text-white shadow-xl">✦</div>
+            <h3 className="mt-6 text-2xl font-black text-gray-950">Your work conversations</h3>
+            <p className="mt-2 max-w-sm leading-7 text-gray-500">
+              Select a conversation to discuss the job, confirm details and keep everything in one place.
+            </p>
           </div>
         ) : (
           <>
-            <div className="p-3 border-b">
-              <div className="font-semibold">{activeChat.other_user_name}</div>
-              <div className="text-sm text-gray-500">
+            <header className="flex items-center gap-3 border-b border-gray-200 px-5 py-4">
+              <Initials name={activeChat.other_user_name} />
+              <div className="min-w-0">
+                <div className="truncate font-black text-gray-950">{activeChat.other_user_name}</div>
+                <div className="text-sm text-gray-500">
                 {activeChat.isNew && userRole === 'client' && clientJobs.length > 0 ? (
                   <select
                     value={selectedJobId}
                     onChange={(e) => handleJobSelect(e.target.value)}
-                    className="mt-1 border rounded px-2 py-1 text-sm"
+                    className="mt-1 rounded-lg border border-gray-300 bg-white py-1.5 pl-3 text-sm font-semibold"
                   >
                     <option value="">Select job...</option>
                     {clientJobs.map((job) => (
@@ -212,22 +254,36 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
                     ))}
                   </select>
                 ) : (
-                  <>Regarding: {activeChat.job_title}</>
+                  <span>Regarding <strong className="font-bold text-green-700">{activeChat.job_title}</strong></span>
                 )}
+                </div>
               </div>
-            </div>
+              <span className="ml-auto hidden items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-bold text-green-800 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-green-500" /> Job chat
+              </span>
+            </header>
 
-            <div className="flex-1 p-4 overflow-y-auto max-h-80 space-y-3">
+            <div className="flex-1 space-y-4 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(22,163,74,0.05),transparent_36%)] p-5 sm:p-7">
+              {messages.length === 0 && (
+                <div className="mx-auto mt-12 max-w-sm rounded-2xl border border-gray-200 bg-white p-5 text-center text-sm leading-6 text-gray-500 shadow-sm">
+                  This is the beginning of your conversation. Share the job details and agree on the next step.
+                </div>
+              )}
               {messages.map((msg) => {
                 const isMine = String(msg.sender_id) === String(userId) && msg.sender_role === userRole;
                 return (
                   <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
-                        isMine ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
+                      className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[70%] ${
+                        isMine
+                          ? 'rounded-br-md bg-gray-950 text-white'
+                          : 'rounded-bl-md border border-gray-200 bg-white text-gray-800'
                       }`}
                     >
-                      {msg.content}
+                      <p>{msg.content}</p>
+                      <p className={`mt-1 text-[10px] ${isMine ? 'text-gray-400' : 'text-gray-400'}`}>
+                        {displayTime(msg.sent_at)}
+                      </p>
                     </div>
                   </div>
                 );
@@ -235,25 +291,28 @@ const MessagesPanel = ({ pendingChat, clientJobs = [], onChatStarted }) => {
               <div ref={messagesEndRef} />
             </div>
 
-            <form onSubmit={handleSend} className="p-3 border-t flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 border rounded px-3 py-2 text-sm"
-              />
+            <form onSubmit={handleSend} className="border-t border-gray-200 bg-white p-4">
+              <div className="flex items-center gap-2 rounded-2xl border border-gray-300 bg-stone-50 p-2 transition focus-within:border-green-600 focus-within:bg-white focus-within:ring-4 focus-within:ring-green-100">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Write a message..."
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-0"
+                />
               <button
                 type="submit"
                 disabled={sending || !newMessage.trim()}
-                className="bg-black text-white px-4 py-2 rounded text-sm disabled:opacity-50"
+                  className="flex h-11 items-center gap-2 rounded-xl bg-green-700 px-4 text-sm font-black text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Send
+                  <span className="hidden sm:inline">{sending ? 'Sending' : 'Send'}</span>
+                  <span aria-hidden="true">➤</span>
               </button>
+              </div>
             </form>
           </>
         )}
-      </div>
+      </section>
     </div>
   );
 };

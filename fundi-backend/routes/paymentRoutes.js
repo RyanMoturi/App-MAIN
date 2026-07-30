@@ -133,7 +133,8 @@ router.put("/jobs/:jobId/agreed-price", authenticate, async (req, res) => {
       assignment.fundi_id,
       "fundi",
       "price_agreed",
-      `The agreed price for "${job.title}" is KES ${price.toLocaleString()}.`
+      `The agreed price for "${job.title}" is KES ${price.toLocaleString()}.`,
+      { job_id: Number(job.id) }
     );
 
     res.json({ message: "Agreed price saved", agreed_price: price });
@@ -178,7 +179,8 @@ router.put("/jobs/:jobId/request-completion", authenticate, async (req, res) => 
         "payment_requested",
         `${req.user.name || "Your fundi"} marked "${job.title}" as finished. Pay KES ${Number(
           assignment.agreed_price
-        ).toLocaleString()} via M-PESA.`
+        ).toLocaleString()} via M-PESA.`,
+        { job_id: Number(job.id) }
       );
     }
 
@@ -336,13 +338,15 @@ router.post("/daraja/callback", async (req, res) => {
           payment.client_id,
           "client",
           "payment_successful",
-          `Payment of KES ${Number(payment.amount).toLocaleString()} for "${job.title}" was successful.`
+          `Payment of KES ${Number(payment.amount).toLocaleString()} for "${job.title}" was successful.`,
+          { job_id: Number(job.id) }
         ),
         createNotification(
           payment.fundi_id,
           "fundi",
           "payment_received",
-          `The client paid KES ${Number(payment.amount).toLocaleString()} for "${job.title}".`
+          `The client paid KES ${Number(payment.amount).toLocaleString()} for "${job.title}".`,
+          { job_id: Number(job.id) }
         ),
       ]);
     } else {
@@ -355,7 +359,8 @@ router.post("/daraja/callback", async (req, res) => {
         "payment_failed",
         `M-PESA payment for "${job.title}" was not completed: ${
           resultDescription || "please try again"
-        }.`
+        }.`,
+        { job_id: Number(job.id) }
       );
     }
   } catch (error) {

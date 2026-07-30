@@ -151,47 +151,47 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="app-shell">
 
-      <div className="bg-red-600 text-white p-5 flex justify-between">
-        <h1 className="text-2xl font-bold">
-          Fundi-Link Admin Dashboard
+      <div className="bg-gray-950 px-6 py-5 text-white shadow-xl flex justify-between">
+        <h1 className="text-2xl font-black">
+          FundiLink Control Centre
         </h1>
 
         <button
           onClick={logout}
-          className="bg-white text-red-600 px-4 py-2 rounded"
+          className="rounded-xl bg-white px-4 py-2 font-bold text-gray-950 transition hover:bg-green-100"
         >
           Logout
         </button>
       </div>
 
-      <div className="p-8">
+      <div className="app-container">
 
         <div className="grid md:grid-cols-4 gap-6 mb-10">
 
-          <div className="bg-white p-6 rounded shadow">
+          <div className="surface-card p-6">
             <h3 className="text-gray-500">Clients</h3>
             <p className="text-4xl font-bold">
               {stats.clients}
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded shadow">
+          <div className="surface-card p-6">
             <h3 className="text-gray-500">Fundis</h3>
             <p className="text-4xl font-bold">
               {stats.fundis}
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded shadow">
+          <div className="surface-card p-6">
             <h3 className="text-gray-500">Jobs</h3>
             <p className="text-4xl font-bold">
               {stats.jobs}
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded shadow">
+          <div className="surface-card p-6">
             <h3 className="text-gray-500">Skills</h3>
             <p className="text-4xl font-bold">
               {stats.skills}

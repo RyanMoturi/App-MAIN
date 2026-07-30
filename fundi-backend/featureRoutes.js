@@ -223,13 +223,15 @@ module.exports = (io) => {
           application.fundi_id,
           "fundi",
           "application_accepted",
-          `Your application for "${job?.title || "this job"}" was accepted.`
+          `Your application for "${job?.title || "this job"}" was accepted.`,
+          { job_id: Number(application.job_id) }
         );
         await createNotification(
           job.client_id,
           "client",
           "job_in_progress",
-          `"${job.title}" is now in progress.`
+          `"${job.title}" is now in progress.`,
+          { job_id: Number(application.job_id) }
         );
       } else {
         await updateById(COLLECTIONS.applications, applicationId, { status: "Rejected" });
@@ -297,7 +299,13 @@ module.exports = (io) => {
 
       const senderName = await getUserName(sender_id, sender_role);
       const notificationContent = `${senderName} sent you a message about "${job?.title || "this job"}".`;
-      await createNotification(receiver_id, receiver_role, "message", notificationContent);
+      await createNotification(receiver_id, receiver_role, "message", notificationContent, {
+        job_id: Number(job_id),
+        other_user_id: Number(sender_id),
+        other_user_role: sender_role,
+        other_user_name: senderName,
+        job_title: job?.title || "Job conversation",
+      });
 
       const messagePayload = {
         ...newMessage,
@@ -309,6 +317,11 @@ module.exports = (io) => {
         io.to(`user_${receiver_role}_${receiver_id}`).emit("receive_notification", {
           type: "message",
           content: notificationContent,
+          job_id: Number(job_id),
+          other_user_id: Number(sender_id),
+          other_user_role: sender_role,
+          other_user_name: senderName,
+          job_title: job?.title || "Job conversation",
         });
       }
 
@@ -534,7 +547,8 @@ module.exports = (io) => {
         fundi_id,
         "fundi",
         "rated",
-        `You received a ${rating}-star review for "${job.title}".`
+        `You received a ${rating}-star review for "${job.title}".`,
+        { job_id: Number(job_id) }
       );
 
       res.status(201).json({ message: "Review submitted", avgRating });

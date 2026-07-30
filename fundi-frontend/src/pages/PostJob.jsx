@@ -73,7 +73,10 @@ const PostJob = ({ onSubmit }) => {
   };
 
   return (
-    <div className="p-4 bg-white rounded shadow max-w-lg mx-auto">
+    <div className="surface-card mx-auto max-w-2xl p-6 sm:p-8">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">New opportunity</p>
+      <h2 className="mb-2 mt-1 text-3xl font-black">Post a job</h2>
+      <p className="mb-7 text-gray-600">Describe the work clearly so nearby fundis can respond with confidence.</p>
       {successMessage && (
         <div className="mb-4 text-green-700 bg-green-100 p-3 rounded">
           {successMessage}
@@ -103,7 +106,7 @@ const PostJob = ({ onSubmit }) => {
             onChange={handleChange}
             value={formData.title}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
           />
           <textarea
             name="description"
@@ -111,14 +114,15 @@ const PostJob = ({ onSubmit }) => {
             onChange={handleChange}
             value={formData.description}
             required
-            className="w-full border p-2 rounded"
+            rows="5"
+            className="field-control"
           />
             <select
             name="skillRequired"
             value={formData.skillRequired}
             onChange={handleChange}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
           >
             <option value="">Select Required Skill</option>
 
@@ -134,9 +138,9 @@ const PostJob = ({ onSubmit }) => {
             onChange={handleChange}
             value={formData.location}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
           />
-          <fieldset className="rounded border p-3">
+          <fieldset className="rounded-2xl border border-gray-200 bg-stone-50 p-4">
             <legend className="px-1 text-sm font-semibold text-gray-700">
               Job budget
             </legend>
@@ -176,7 +180,7 @@ const PostJob = ({ onSubmit }) => {
                   onChange={handleChange}
                   placeholder="e.g. 5000"
                   required
-                  className="w-full rounded border p-2"
+                  className="field-control"
                 />
               </div>
             )}
@@ -186,9 +190,9 @@ const PostJob = ({ onSubmit }) => {
             name="image"
             accept="image/*"
             onChange={handleChange}
-            className="w-full border p-2 rounded"
+            className="w-full rounded-xl border border-dashed border-gray-300 bg-stone-50 p-4 text-sm"
           />
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+          <button type="submit" className="primary-action w-full">
             Post Job
           </button>
         </form>

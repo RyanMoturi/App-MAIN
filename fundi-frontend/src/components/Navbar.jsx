@@ -53,10 +53,10 @@ const Navbar = () => {
   const closeMenu = () => setOpen(false);
 
   const navLinkClass =
-    'flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-black transition';
+    'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-gray-700 hover:bg-green-50 hover:text-green-800 transition';
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+    <nav className="sticky top-0 z-40 border-b border-gray-200/80 bg-white/90 shadow-[0_8px_30px_-24px_rgba(15,23,42,0.5)] backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link
           to="/"
@@ -96,7 +96,7 @@ const Navbar = () => {
           {!loggedIn && (
             <Link
               to="/signup"
-              className="rounded bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition"
+              className="rounded-xl bg-gray-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
             >
               Sign up
             </Link>
@@ -104,7 +104,7 @@ const Navbar = () => {
           {loggedIn && (
             <button
               onClick={handleLogout}
-              className="rounded bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 transition"
+              className="rounded-xl bg-gray-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-green-700"
             >
               Logout
             </button>

@@ -314,18 +314,19 @@ const JobDetails = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-4">
-      <Link to={backLink} className="text-blue-600 hover:underline mb-4 inline-block">
+    <div className="app-shell">
+    <div className="app-container max-w-3xl">
+      <Link to={backLink} className="mb-5 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm transition hover:border-green-300 hover:text-green-800">
         &larr; {backLabel}
       </Link>
 
       <div className="flex justify-between items-start mb-4">
-        <h1 className="text-3xl font-bold">{editing ? 'Edit Job' : job.title}</h1>
+        <h1 className="text-3xl font-black sm:text-4xl">{editing ? 'Edit Job' : job.title}</h1>
         {isOwner && !editing && (
           <div className="flex gap-2">
             <button
               onClick={() => setEditing(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              className="secondary-action px-4 py-2"
             >
               Edit
             </button>
@@ -341,14 +342,14 @@ const JobDetails = () => {
       </div>
 
       {editing ? (
-        <form onSubmit={handleSave} className="bg-white shadow rounded p-6 space-y-4">
+        <form onSubmit={handleSave} className="surface-card space-y-4 p-6">
           <input
             name="title"
             placeholder="Job Title"
             onChange={handleChange}
             value={formData.title}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
           />
           <textarea
             name="description"
@@ -356,7 +357,7 @@ const JobDetails = () => {
             onChange={handleChange}
             value={formData.description}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
             rows="4"
           />
           <input
@@ -365,7 +366,7 @@ const JobDetails = () => {
             onChange={handleChange}
             value={formData.skillRequired}
             required
-            className="w-full border p-2 rounded"
+            className="field-control"
           />
           <input
             name="location"
@@ -697,6 +698,7 @@ const JobDetails = () => {
         </div>
     ))
 )}
+    </div>
     </div>
   );
 };

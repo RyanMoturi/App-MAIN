@@ -221,6 +221,31 @@ const ClientDashboard = () => {
     fetchNotifications();
   };
 
+  const openNotification = async (notification) => {
+    if (!notification.is_read) await markNotificationRead(notification.id);
+
+    if (notification.type === "message") {
+      if (notification.other_user_id) {
+        setPendingChat({
+          jobId: notification.job_id,
+          jobTitle: notification.job_title,
+          otherUserId: notification.other_user_id,
+          otherUserRole: notification.other_user_role || "fundi",
+          otherUserName: notification.other_user_name || "Fundi",
+        });
+      }
+      setActiveTab("Messages");
+      return;
+    }
+
+    if (notification.job_id) {
+      navigate(`/jobs/${notification.job_id}`);
+      return;
+    }
+
+    setActiveTab(notification.type === "profile" ? "Profile" : "My Jobs");
+  };
+
   const fetchClientProfile = async () => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId) return;
@@ -333,24 +358,27 @@ const ClientDashboard = () => {
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="app-shell">
+      <div className="app-container">
 
-      <h1 className="text-3xl font-bold mb-6">
-        Client Dashboard
-      </h1>
+      <div className="mb-7">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-green-700">Client workspace</p>
+        <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">Manage work with confidence</h1>
+        <p className="mt-2 max-w-2xl text-gray-600">Find nearby professionals, manage your jobs and keep every conversation moving.</p>
+      </div>
 
-      <div className="relative mb-8 max-w-xs">
+      <div className="relative mb-8 max-w-sm">
         <button
           type="button"
           onClick={() => setPageMenuOpen(!pageMenuOpen)}
-          className="flex w-full items-center justify-between rounded bg-white px-4 py-3 font-semibold shadow border hover:bg-gray-50"
+          className="surface-card flex w-full items-center justify-between px-5 py-4 font-bold transition hover:border-green-300"
         >
           <span>{activeTab}</span>
           <MenuIcon className="h-5 w-5" />
         </button>
 
         {pageMenuOpen && (
-          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded border bg-white shadow-lg">
+          <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 shadow-2xl">
             {TABS.map((tab) => (
               <button
                 key={tab}
@@ -359,8 +387,8 @@ const ClientDashboard = () => {
                   setActiveTab(tab);
                   setPageMenuOpen(false);
                 }}
-                className={`block w-full px-4 py-3 text-left text-sm font-medium hover:bg-gray-100 ${
-                  activeTab === tab ? "bg-gray-100 text-black" : "text-gray-700"
+                className={`block w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition hover:bg-green-50 ${
+                  activeTab === tab ? "bg-gray-950 text-white hover:bg-gray-950" : "text-gray-700"
                 }`}
               >
                 {tab}
@@ -695,18 +723,20 @@ const ClientDashboard = () => {
       {activeTab === "Notifications" && (
         <div>
 
-          <h2 className="text-2xl font-semibold mb-6">
-            Notifications
-          </h2>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Activity centre</p>
+          <h2 className="mb-2 mt-1 text-3xl font-black">Notifications</h2>
+          <p className="mb-6 text-gray-600">Select a notification to go straight to the job or conversation.</p>
 
           {loadingNotifications ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            <div className="surface-card p-10 text-center text-gray-500">
               Loading notifications...
             </div>
           ) : notifications.length === 0 ? (
 
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-              No notifications.
+            <div className="surface-card p-10 text-center text-gray-500">
+              <div className="text-3xl">✓</div>
+              <p className="mt-3 font-bold text-gray-900">You're all caught up</p>
+              <p className="mt-1 text-sm">Important job and payment updates will appear here.</p>
             </div>
 
           ) : (
@@ -715,43 +745,43 @@ const ClientDashboard = () => {
 
               {notifications.map((notification) => (
 
-                <div
+                <button
+                  type="button"
                   key={notification.id}
-                  className="bg-white rounded-lg shadow p-5 flex justify-between items-center"
+                  onClick={() => openNotification(notification)}
+                  className={`group flex w-full items-center justify-between gap-4 rounded-2xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-green-300 hover:shadow-lg ${
+                    notification.is_read ? "border-gray-200 bg-white" : "border-green-200 bg-green-50/60"
+                  }`}
                 >
 
-                  <div>
+                  <div className="flex min-w-0 items-start gap-4">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${
+                      notification.type === "message" ? "bg-gray-950 text-white" : "bg-green-100 text-green-800"
+                    }`}>{notification.type === "message" ? "✉" : "↗"}</span>
+                    <div>
 
-                    <p className="font-medium">
+                    <p className="font-bold text-gray-950">
                       {notification.content}
                     </p>
 
                     {notification.created_at && (
                       <p className="text-sm text-gray-500 mt-1">
-                        {notification.created_at}
+                        {formatTimeAgo(notification.created_at)}
                       </p>
                     )}
-
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-3">
                     {!notification.is_read && (
-                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                      <span className="rounded-full bg-green-700 px-2.5 py-1 text-xs font-bold text-white">
                         New
                       </span>
                     )}
-
-                    {!notification.is_read && (
-                      <button
-                        onClick={() => markNotificationRead(notification.id)}
-                        className="text-sm text-blue-600 hover:underline"
-                      >
-                        Mark read
-                      </button>
-                    )}
+                    <span className="text-xl text-gray-300 transition group-hover:translate-x-1 group-hover:text-green-700">→</span>
                   </div>
 
-                </div>
+                </button>
 
               ))}
 
@@ -1060,6 +1090,7 @@ const ClientDashboard = () => {
         </div>
       )}
 
+      </div>
     </div>
   );
 };

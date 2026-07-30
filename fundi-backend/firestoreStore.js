@@ -144,12 +144,13 @@ const sortByDateDesc = (rows, field) =>
 const sortByDateAsc = (rows, field) =>
   [...rows].sort((a, b) => toSortableTime(a[field]) - toSortableTime(b[field]));
 
-const createNotification = (userId, userRole, type, content) =>
+const createNotification = (userId, userRole, type, content, context = {}) =>
   addWithId(COLLECTIONS.notifications, {
     user_id: Number(userId),
     user_role: userRole,
     type,
     content,
+    ...context,
     is_read: 0,
     created_at: timestamp(),
   });

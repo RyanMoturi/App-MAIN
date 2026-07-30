@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { formatTimeAgo } from '../utils/timeAgo';
 
 const JobList = () => {
@@ -29,19 +30,25 @@ const JobList = () => {
   if (error) return <div className="text-center text-red-600 py-12">{error}</div>;
 
   return (
-    <div className="max-w-3xl mx-auto py-12 px-4">
-      <h1 className="text-3xl font-bold mb-6 text-center">Available Jobs</h1>
+    <div className="app-shell">
+    <div className="app-container max-w-5xl">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-green-700">Local opportunities</p>
+      <h1 className="mt-1 text-4xl font-black">Available jobs</h1>
+      <p className="mb-8 mt-2 text-gray-600">Work matched to your skills, with the details you need up front.</p>
       {jobs.length === 0 ? (
-        <div className="text-center text-gray-500">No jobs found for your skill.</div>
+          <div className="surface-card p-12 text-center text-gray-500">No jobs found for your skill.</div>
       ) : (
         <ul className="space-y-4">
           {jobs.map(job => (
-            <li key={job.id} className="bg-white shadow rounded p-6 hover:bg-yellow-50 transition">
+            <li key={job.id} className="surface-card overflow-hidden p-6 transition hover:-translate-y-1 hover:border-green-300 hover:shadow-xl">
               {job.image_url && (
                 <img src={job.image_url} alt="Job" className="w-full h-48 object-cover rounded mb-2" />
               )}
-              <a href={`/jobs/${job.id}`} className="text-xl font-semibold text-black hover:text-yellow-600">{job.title}</a>
-              <p className="text-gray-600">{job.location}</p>
+              <div className="flex items-start justify-between gap-4">
+              <Link to={`/jobs/${job.id}`} className="text-xl font-black text-gray-950 hover:text-green-700">{job.title}</Link>
+              <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-800">{job.skill_required || 'General'}</span>
+              </div>
+              <p className="mt-2 text-gray-600">⌖ {job.location}</p>
               <p className="text-sm text-gray-500 mt-1">{formatTimeAgo(job.created_at)}</p>
               <p className="text-gray-700 mt-2">{job.description}</p>
               <p
@@ -55,6 +62,7 @@ const JobList = () => {
           ))}
         </ul>
       )}
+    </div>
     </div>
   );
 };

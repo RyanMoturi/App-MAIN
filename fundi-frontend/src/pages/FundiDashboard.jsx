@@ -33,6 +33,7 @@ const FundiDashboard = () => {
   const [activeJobs, setActiveJobs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [pendingChat, setPendingChat] = useState(null);
   const [portfolio, setPortfolio] = useState([]);
   const [completedJobs, setCompletedJobs] = useState([]);
   const [applyingJobId, setApplyingJobId] = useState(null);
@@ -258,6 +259,37 @@ const FundiDashboard = () => {
     fetchNotifications();
   };
 
+  const openNotification = async (notification) => {
+    if (!notification.is_read) await markNotificationRead(notification.id);
+
+    if (notification.type === "message") {
+      if (notification.other_user_id) {
+        setPendingChat({
+          jobId: notification.job_id,
+          jobTitle: notification.job_title,
+          otherUserId: notification.other_user_id,
+          otherUserRole: notification.other_user_role || "client",
+          otherUserName: notification.other_user_name || "Client",
+        });
+      }
+      setActiveTab("Messages");
+      return;
+    }
+
+    if (notification.job_id) {
+      navigate(`/jobs/${notification.job_id}`);
+      return;
+    }
+
+    const tabByType = {
+      application_accepted: "Active Jobs",
+      rated: "Completed Jobs",
+      price_agreed: "Active Jobs",
+      payment_received: "Completed Jobs",
+    };
+    setActiveTab(tabByType[notification.type] || "My Applications");
+  };
+
   const saveProfile = async () => {
     try {
       if (!hasCoordinates(profile)) {
@@ -339,11 +371,16 @@ const FundiDashboard = () => {
     }
   };
   return (
-  <div className="p-6 bg-gray-100 min-h-screen">
-    <h1 className="text-3xl font-bold mb-4">Fundi Dashboard</h1>
+  <div className="app-shell">
+    <div className="app-container">
+    <div className="mb-7">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-green-700">Fundi workspace</p>
+      <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">Build your business</h1>
+      <p className="mt-2 max-w-2xl text-gray-600">Discover nearby work, manage active jobs and build a profile clients can trust.</p>
+    </div>
 
     {!isVerified && (
-      <div className="mb-4 bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded">
+      <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
         Verification status: {profile.verification_status || "Pending"}.
         {" "}
         You can browse jobs, but you cannot apply until an admin verifies your account.
@@ -353,18 +390,18 @@ const FundiDashboard = () => {
       </div>
     )}
 
-    <div className="relative mb-6 max-w-xs">
+    <div className="relative mb-8 max-w-sm">
       <button
         type="button"
         onClick={() => setPageMenuOpen(!pageMenuOpen)}
-        className="flex w-full items-center justify-between rounded bg-white px-4 py-3 font-semibold shadow border hover:bg-gray-50"
+        className="surface-card flex w-full items-center justify-between px-5 py-4 font-bold transition hover:border-green-300"
       >
         <span>{activeTab}</span>
         <MenuIcon className="h-5 w-5" />
       </button>
 
       {pageMenuOpen && (
-        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded border bg-white shadow-lg">
+        <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-2 shadow-2xl">
           {TABS.map((tab) => (
             <button
               key={tab}
@@ -373,8 +410,8 @@ const FundiDashboard = () => {
                 setActiveTab(tab);
                 setPageMenuOpen(false);
               }}
-              className={`block w-full px-4 py-3 text-left text-sm font-medium hover:bg-gray-100 ${
-                activeTab === tab ? "bg-gray-100 text-black" : "text-gray-700"
+              className={`block w-full rounded-xl px-4 py-3 text-left text-sm font-bold transition hover:bg-green-50 ${
+                activeTab === tab ? "bg-gray-950 text-white hover:bg-gray-950" : "text-gray-700"
               }`}
             >
               {tab}
@@ -688,49 +725,58 @@ const FundiDashboard = () => {
 )}
 {activeTab === "Messages" && (
   <div>
-    <h2 className="text-xl font-semibold mb-4">Messages</h2>
+    <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Job conversations</p>
+    <h2 className="mb-6 mt-1 text-3xl font-black">Messages</h2>
 
-    <MessagesPanel />
+    <MessagesPanel pendingChat={pendingChat} onChatStarted={() => setPendingChat(null)} />
   </div>
 )}
 {activeTab === "Notifications" && (
   <div>
-    <h2 className="text-xl font-semibold mb-4">
-      Notifications
-    </h2>
+    <p className="text-xs font-black uppercase tracking-[0.18em] text-green-700">Activity centre</p>
+    <h2 className="mb-2 mt-1 text-3xl font-black">Notifications</h2>
+    <p className="mb-6 text-gray-600">Select an update to open the relevant job or conversation.</p>
 
     {loadingNotifications ? (
-      <div className="bg-white p-6 rounded shadow text-center text-gray-500">
+      <div className="surface-card p-10 text-center text-gray-500">
         Loading notifications...
       </div>
     ) : notifications.length === 0 ? (
-      <div className="bg-white p-6 rounded shadow text-center text-gray-500">
-        No notifications.
+      <div className="surface-card p-10 text-center text-gray-500">
+        <div className="text-3xl">✓</div>
+        <p className="mt-3 font-bold text-gray-900">You're all caught up</p>
+        <p className="mt-1 text-sm">Applications, messages and payment updates will appear here.</p>
       </div>
     ) : (
       <ul className="space-y-3">
         {notifications.map((note) => (
           <li
             key={note.id}
-            className="bg-white p-4 rounded shadow"
           >
-            <div className="flex justify-between gap-4">
-              <div>
-                <p>{note.content}</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {note.created_at}
+            <button
+              type="button"
+              onClick={() => openNotification(note)}
+              className={`group flex w-full items-center justify-between gap-4 rounded-2xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-green-300 hover:shadow-lg ${
+                note.is_read ? "border-gray-200 bg-white" : "border-green-200 bg-green-50/60"
+              }`}
+            >
+              <div className="flex min-w-0 items-start gap-4">
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${
+                  note.type === "message" ? "bg-gray-950 text-white" : "bg-green-100 text-green-800"
+                }`}>{note.type === "message" ? "✉" : "↗"}</span>
+                <div>
+                <p className="font-bold text-gray-950">{note.content}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {formatTimeAgo(note.created_at)}
                 </p>
+                </div>
               </div>
 
               {!note.is_read && (
-                <button
-                  onClick={() => markNotificationRead(note.id)}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Mark read
-                </button>
+                <span className="rounded-full bg-green-700 px-2.5 py-1 text-xs font-bold text-white">New</span>
               )}
-            </div>
+              <span className="text-xl text-gray-300 transition group-hover:translate-x-1 group-hover:text-green-700">→</span>
+            </button>
           </li>
         ))}
       </ul>
@@ -1274,6 +1320,7 @@ const FundiDashboard = () => {
     </div>
   </div>
 )}
+    </div>
   </div>
 );
 

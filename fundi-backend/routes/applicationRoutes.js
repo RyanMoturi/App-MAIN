@@ -70,7 +70,8 @@ router.post("/apply", async (req, res) => {
       job.client_id,
       "client",
       "application",
-      `${fundiAccount.name || "A fundi"} applied for "${job.title}".`
+      `${fundiAccount.name || "A fundi"} applied for "${job.title}".`,
+      { job_id: Number(jobId) }
     );
 
     res.status(201).json({ message: "Application submitted successfully." });
@@ -229,14 +230,16 @@ router.put("/:id/accept", async (req, res) => {
       application.fundi_id,
       "fundi",
       "application_accepted",
-      `Your application for "${job?.title || "this job"}" was accepted.`
+      `Your application for "${job?.title || "this job"}" was accepted.`,
+      { job_id: Number(application.job_id) }
     );
 
     await createNotification(
       job.client_id,
       "client",
       "job_in_progress",
-      `"${job.title}" is now in progress.`
+      `"${job.title}" is now in progress.`,
+      { job_id: Number(application.job_id) }
     );
 
     res.json({ message: "Application accepted successfully." });

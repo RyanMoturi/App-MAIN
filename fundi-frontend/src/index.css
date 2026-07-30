@@ -2,6 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply bg-stone-50 text-gray-950 antialiased;
+  }
+
+  select {
+    @apply appearance-none bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m6 8 4 4 4-4' stroke='%23111827' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.85rem center;
+    background-size: 1.1rem;
+    padding-right: 2.75rem !important;
+  }
+
+  input,
+  textarea,
+  select,
+  button,
+  a {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(22,163,74,0.09),transparent_30%),linear-gradient(to_bottom,#fafaf9,#f5f5f4)];
+  }
+
+  .app-container {
+    @apply mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8;
+  }
+
+  .surface-card {
+    @apply rounded-3xl border border-gray-200/80 bg-white shadow-[0_18px_55px_-35px_rgba(15,23,42,0.35)];
+  }
+
+  .field-control {
+    @apply w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-950 shadow-sm transition placeholder:text-gray-400 hover:border-gray-400 focus:border-green-600 focus:ring-4 focus:ring-green-100;
+  }
+
+  .primary-action {
+    @apply inline-flex items-center justify-center rounded-xl bg-gray-950 px-5 py-3 font-bold text-white shadow-lg shadow-gray-950/10 transition hover:-translate-y-0.5 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .secondary-action {
+    @apply inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 font-bold text-gray-900 transition hover:border-green-600 hover:bg-green-50 hover:text-green-800;
+  }
+}
+
 @keyframes hero-float {
   0%,
   100% {

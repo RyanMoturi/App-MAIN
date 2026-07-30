@@ -259,6 +259,11 @@ const FundiDashboard = () => {
 
   const saveProfile = async () => {
     try {
+      if (!hasCoordinates(profile)) {
+        alert("Please type your base location and select it from the Google suggestions.");
+        return;
+      }
+
       setSavingProfile(true);
 
       const fundiId = localStorage.getItem("fundiId");

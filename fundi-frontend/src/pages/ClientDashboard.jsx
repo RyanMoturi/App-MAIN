@@ -6,6 +6,7 @@ import MessagesPanel from "../components/MessagesPanel";
 import FundiProfile from "../components/FundiProfile";
 import { MenuIcon } from "../components/Icons";
 import LocationAutocomplete from "../components/LocationAutocomplete";
+import { reverseGeocodeCoordinates } from "../utils/googleMaps";
 import {
   getBrowserLocation,
   hasCoordinates,
@@ -36,7 +37,9 @@ const ClientDashboard = () => {
   const [fundis, setFundis] = useState([]);
   const [loadingFundis, setLoadingFundis] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(
+    () => localStorage.getItem("location") || ""
+  );
   const [searchOrigin, setSearchOrigin] = useState(savedAccountLocation);
   const [locationStatus, setLocationStatus] = useState("");
   const [locating, setLocating] = useState(false);
@@ -151,9 +154,22 @@ const ClientDashboard = () => {
 
     try {
       origin = await getBrowserLocation();
-      setLocationStatus("Sorted nearest to your current location.");
+      setLocationStatus("Using your current location and sorting nearest first.");
+
+      try {
+        const currentPlace = await reverseGeocodeCoordinates(origin);
+        setLocation(currentPlace.address);
+      } catch (geocodingError) {
+        if (!searchLocation) {
+          setLocation(localStorage.getItem("location") || "Current location");
+        }
+        console.info("Current coordinates could not be named.", geocodingError);
+      }
     } catch (error) {
       if (origin) {
+        setLocation(
+          searchLocation || localStorage.getItem("location") || "Saved location"
+        );
         setLocationStatus("Sorted nearest to your saved account address.");
       } else {
         setLocationStatus(
@@ -235,6 +251,11 @@ const ClientDashboard = () => {
   };
 
   const saveClientProfile = async () => {
+    if (!hasCoordinates(clientProfile)) {
+      alert("Please type your address and select it from the Google suggestions.");
+      return;
+    }
+
     const clientId = localStorage.getItem("clientId");
     const formData = new FormData();
 
@@ -472,7 +493,11 @@ const ClientDashboard = () => {
             <div className="grid gap-4 lg:grid-cols-[220px_minmax(280px,1fr)_auto_auto]">
               <select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e) => {
+                  const category = e.target.value;
+                  setSelectedCategory(category);
+                  fetchFundis(category, location, searchOrigin);
+                }}
                 className="rounded border px-4 py-2"
               >
                 <option value="All">All Categories</option>
@@ -504,9 +529,10 @@ const ClientDashboard = () => {
                   setLocation(place.address);
                   setSearchOrigin(origin);
                   setLocationStatus(`Searching near ${place.address}.`);
+                  fetchFundis(selectedCategory, place.address, origin);
                 }}
-                bias={savedAccountLocation()}
-                placeholder="Search around an address or building"
+                bias={searchOrigin || savedAccountLocation()}
+                placeholder="Your current location"
                 className="w-full rounded border bg-white"
               />
 

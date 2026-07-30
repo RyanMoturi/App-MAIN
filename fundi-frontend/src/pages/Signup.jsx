@@ -1,12 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import LocationAutocomplete from "../components/LocationAutocomplete";
 import { hasGoogleMapsKey } from "../utils/googleMaps";
+import {
+  getBrowserLocation,
+  savedAccountLocation,
+} from "../utils/location";
 
 const Signup = () => {
   const navigate = useNavigate();
 
   const [role, setRole] = useState("client");
+  const [locationBias, setLocationBias] = useState(savedAccountLocation);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -28,6 +33,16 @@ const Signup = () => {
     good_conduct_certificate: null,
     professional_certificates: null,
   });
+
+  useEffect(() => {
+    if (locationBias) return;
+
+    getBrowserLocation({ timeout: 6000 })
+      .then(setLocationBias)
+      .catch(() => {
+        // Suggestions still work across Kenya when permission is denied.
+      });
+  }, [locationBias]);
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
@@ -209,7 +224,7 @@ const Signup = () => {
               htmlFor="signup-location"
               className="mb-2 block text-sm font-medium text-gray-700"
             >
-              Your address
+              {role === "client" ? "Your address" : "Where are you based?"}
             </label>
             <LocationAutocomplete
               id="signup-location"
@@ -232,13 +247,19 @@ const Signup = () => {
                   place_id: place.placeId,
                 }))
               }
-              placeholder="Start typing your building, road or estate"
+              bias={locationBias}
+              placeholder={
+                role === "client"
+                  ? "Start typing your apartment, building, road or estate"
+                  : "Start typing your estate, town or base location"
+              }
               className="w-full rounded border bg-white"
               required
             />
             <p className="mt-1 text-xs text-gray-500">
-              Pick a suggestion so nearby fundis and jobs can be ordered
-              accurately.
+              {role === "client"
+                ? "Start with your apartment, building, estate or road, then select the correct Google suggestion."
+                : "Select the Google suggestion for the area where you normally work from."}
             </p>
           </div>
 

@@ -9,7 +9,14 @@ const configuredRegions = (
   .map((code) => code.trim().toLowerCase())
   .filter(Boolean);
 
-const predictionText = (text) => text?.toString?.() || "";
+const predictionText = (text) => {
+  if (!text) return "";
+  if (typeof text === "string") return text;
+  if (typeof text.text === "string") return text.text;
+
+  const converted = text.toString?.();
+  return converted && converted !== "[object Object]" ? converted : "";
+};
 
 const LocationAutocomplete = ({
   value,
@@ -33,6 +40,7 @@ const LocationAutocomplete = ({
   );
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (!hasGoogleMapsKey()) return undefined;
@@ -46,11 +54,17 @@ const LocationAutocomplete = ({
 
         placesRef.current = places;
         sessionTokenRef.current = new places.AutocompleteSessionToken();
+        setErrorMessage("");
         setStatus("ready");
       })
       .catch((error) => {
         console.error(error);
-        if (!disposed) setStatus("fallback");
+        if (!disposed) {
+          setStatus("fallback");
+          setErrorMessage(
+            "Address suggestions could not load. Check the Google Maps key and allowed website domains."
+          );
+        }
       });
 
     return () => {
@@ -101,7 +115,7 @@ const LocationAutocomplete = ({
               lat: Number(bias.latitude),
               lng: Number(bias.longitude),
             },
-            radius: 5000,
+            radius: 50000,
           };
           request.origin = {
             lat: Number(bias.latitude),
@@ -118,16 +132,24 @@ const LocationAutocomplete = ({
         const predictions = matches
           .map((suggestion) => suggestion.placePrediction)
           .filter(Boolean)
-          .slice(0, 5);
+          .slice(0, 8);
 
         setSuggestions(predictions);
         setOpen(predictions.length > 0);
         setActiveIndex(-1);
+        setErrorMessage(
+          predictions.length === 0
+            ? "No matching places found. Add a building, estate, road or town name."
+            : ""
+        );
       } catch (error) {
         if (requestId !== requestRef.current) return;
         console.error("Could not load address suggestions.", error);
         setSuggestions([]);
         setOpen(false);
+        setErrorMessage(
+          "Address suggestions are unavailable. Please try again in a moment."
+        );
       }
     }, 250);
 
@@ -210,7 +232,7 @@ const LocationAutocomplete = ({
           placeholder={
             status === "loading" ? "Loading address search…" : placeholder
           }
-          disabled={disabled || status === "loading"}
+          disabled={disabled}
           required={required}
           autoComplete="off"
           role="combobox"
@@ -292,9 +314,9 @@ const LocationAutocomplete = ({
         </div>
       )}
 
-      {status === "fallback" && !hasGoogleMapsKey() && (
+      {(errorMessage || (status === "fallback" && !hasGoogleMapsKey())) && (
         <p className="mt-1 text-xs text-amber-700">
-          Address suggestions are temporarily unavailable.
+          {errorMessage || "Address suggestions are temporarily unavailable."}
         </p>
       )}
     </div>

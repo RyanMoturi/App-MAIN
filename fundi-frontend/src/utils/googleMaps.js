@@ -62,3 +62,29 @@ export const loadGoogleMaps = () => {
 
   return googleMapsPromise;
 };
+
+export const reverseGeocodeCoordinates = async ({ latitude, longitude }) => {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error("Valid coordinates are required.");
+  }
+
+  const maps = await loadGoogleMaps();
+  const { Geocoder } = await maps.importLibrary("geocoding");
+  const geocoder = new Geocoder();
+  const { results = [] } = await geocoder.geocode({
+    location: { lat, lng },
+  });
+
+  const result = results[0];
+  if (!result) throw new Error("No address was found for this location.");
+
+  return {
+    address: result.formatted_address,
+    latitude: lat,
+    longitude: lng,
+    placeId: result.place_id || "",
+  };
+};

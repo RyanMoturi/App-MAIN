@@ -169,13 +169,12 @@ const LocationAutocomplete = ({
       <div
         ref={hostRef}
         className={`location-autocomplete-host ${className}`}
-      >
-        {status === "loading" && (
-          <div className="px-3 py-3 text-sm text-gray-500">
-            Loading address suggestions…
-          </div>
-        )}
-      </div>
+      />
+      {status === "loading" && (
+        <div className="absolute inset-0 px-3 py-3 text-sm text-gray-500">
+          Loading address suggestions…
+        </div>
+      )}
       {required && <input tabIndex="-1" className="sr-only" value={value} readOnly required />}
     </div>
   );

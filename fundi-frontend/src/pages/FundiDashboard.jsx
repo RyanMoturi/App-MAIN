@@ -5,6 +5,7 @@ import MessagesPanel from "../components/MessagesPanel";
 import { MenuIcon } from "../components/Icons";
 import LocationAutocomplete from "../components/LocationAutocomplete";
 import { hasCoordinates } from "../utils/location";
+import StarRating from "../components/StarRating";
 
 
 const TABS = [
@@ -738,11 +739,19 @@ const FundiDashboard = () => {
 )}
 {activeTab === "Profile" && (
   <div>
-    <h2 className="text-2xl font-semibold mb-6">My Profile</h2>
+    <div className="mb-6">
+      <p className="text-sm font-bold uppercase tracking-[0.16em] text-green-700">
+        Professional presence
+      </p>
+      <h2 className="mt-1 text-3xl font-black">My Profile</h2>
+      <p className="mt-2 text-gray-600">
+        Present your skills, verification and work location with confidence.
+      </p>
+    </div>
 
-    <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
-      <div className="mb-5 flex items-center gap-4">
-        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200">
+    <div className="grid max-w-5xl gap-x-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm md:grid-cols-2">
+      <div className="-mx-6 -mt-6 mb-7 flex flex-col gap-5 rounded-t-3xl bg-gradient-to-br from-gray-950 via-gray-900 to-green-950 p-7 text-white md:col-span-2 md:flex-row md:items-center">
+        <div className="flex h-28 w-28 flex-none items-center justify-center overflow-hidden rounded-2xl border-4 border-white/20 bg-green-600 text-3xl font-black">
           {newPhoto || profile.profile_photo ? (
             <img
               src={
@@ -753,25 +762,44 @@ const FundiDashboard = () => {
               alt="Profile"
               className="w-full h-full object-cover"
             />
-          ) : null}
+          ) : (
+            (profile.name || "F").charAt(0).toUpperCase()
+          )}
         </div>
 
-        <div className="flex-1">
-          <p className="font-semibold">{profile.name || "Your Name"}</p>
-          <p className="text-sm text-gray-500">
-            {profile.skill || "Skill not set"}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-green-400/15 px-3 py-1 text-xs font-bold text-green-200">
+              {profile.verification_status || "Pending"} verification
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-gray-200">
+              {profile.skill || "Skill not set"}
+            </span>
+          </div>
+          <h3 className="mt-3 truncate text-2xl font-black">
+            {profile.name || "Complete your professional profile"}
+          </h3>
+          <p className="mt-1 truncate text-sm text-gray-300">
+            {profile.location || "Base location not set"}
           </p>
-          <p className="text-sm text-gray-500">
-            Verification: {profile.verification_status || "Pending"}
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <StarRating value={Number(profile.rating) || 0} readOnly size="sm" />
+            <span className="text-sm font-bold text-amber-200">
+              {Number(profile.rating || 0).toFixed(1)} average rating
+            </span>
+          </div>
         </div>
 
         {editingProfile && (
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setNewPhoto(e.target.files[0])}
-          />
+          <label className="cursor-pointer rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold hover:bg-white/15">
+            Change photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setNewPhoto(e.target.files[0])}
+              className="sr-only"
+            />
+          </label>
         )}
       </div>
 
@@ -928,12 +956,12 @@ const FundiDashboard = () => {
 
       <div className="mb-5">
         <label className="block font-semibold mb-2">Average Rating</label>
-        <input
-          type="text"
-          value={`${profile.rating || 5}/5`}
-          readOnly
-          className="w-full border rounded px-4 py-2 bg-gray-100"
-        />
+        <div className="flex min-h-11 items-center gap-3 rounded border bg-gray-50 px-4 py-2">
+          <StarRating value={Number(profile.rating) || 0} readOnly size="sm" />
+          <span className="text-sm font-semibold text-gray-600">
+            {Number(profile.rating || 0).toFixed(1)} out of 5
+          </span>
+        </div>
       </div>
 
       <div className="mb-5">
@@ -984,7 +1012,7 @@ const FundiDashboard = () => {
         )}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-6 md:col-span-2">
         {editingProfile ? (
           <>
             <button

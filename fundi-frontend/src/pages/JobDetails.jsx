@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { formatTimeAgo } from '../utils/timeAgo';
+import StarRating from '../components/StarRating';
 
 const JobDetails = () => {
   const { id } = useParams();
@@ -564,19 +565,19 @@ const JobDetails = () => {
             >
               <h3 className="font-semibold">Rate this fundi</h3>
 
-              <select
-                value={review.rating}
-                onChange={(e) =>
-                  setReview({ ...review, rating: e.target.value })
-                }
-                className="w-full border p-2 rounded"
-              >
-                <option value="5">5 stars</option>
-                <option value="4">4 stars</option>
-                <option value="3">3 stars</option>
-                <option value="2">2 stars</option>
-                <option value="1">1 star</option>
-              </select>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <p className="mb-2 text-sm font-medium text-gray-700">
+                  Tap a star to rate the completed work
+                </p>
+                <StarRating
+                  value={Number(review.rating)}
+                  onChange={(rating) =>
+                    setReview({ ...review, rating: String(rating) })
+                  }
+                  size="lg"
+                  showLabel
+                />
+              </div>
 
               <textarea
                 value={review.comment}

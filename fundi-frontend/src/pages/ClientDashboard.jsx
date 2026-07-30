@@ -766,14 +766,20 @@ const ClientDashboard = () => {
       {activeTab === "Profile" && (
         <div>
 
-          <h2 className="text-2xl font-semibold mb-6">
-            My Profile
-          </h2>
+          <div className="mb-6">
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-green-700">
+              Account
+            </p>
+            <h2 className="mt-1 text-3xl font-black">My Profile</h2>
+            <p className="mt-2 text-gray-600">
+              Keep your contact details and precise service location up to date.
+            </p>
+          </div>
 
-          <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+          <div className="grid max-w-5xl gap-x-6 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm md:grid-cols-2">
 
-            <div className="mb-5 flex items-center gap-4">
-              <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200">
+            <div className="-mx-6 -mt-6 mb-7 flex flex-col gap-5 rounded-t-3xl bg-gradient-to-br from-gray-950 to-green-950 p-7 text-white md:col-span-2 md:flex-row md:items-center">
+              <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-2xl border-4 border-white/20 bg-green-600 text-3xl font-black">
                 {newProfilePhoto || clientProfile.profile_photo ? (
                   <img
                     src={
@@ -784,15 +790,33 @@ const ClientDashboard = () => {
                     alt="Profile"
                     className="w-full h-full object-cover"
                   />
-                ) : null}
+                ) : (
+                  (clientProfile.name || "C").charAt(0).toUpperCase()
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <span className="inline-flex rounded-full bg-green-400/15 px-3 py-1 text-xs font-bold text-green-200">
+                  Client account
+                </span>
+                <h3 className="mt-3 truncate text-2xl font-black">
+                  {clientProfile.name || "Complete your profile"}
+                </h3>
+                <p className="mt-1 truncate text-sm text-gray-300">
+                  {clientProfile.location || "Location not set"}
+                </p>
               </div>
 
               {editingProfile && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setNewProfilePhoto(e.target.files[0])}
-                />
+                <label className="cursor-pointer rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-bold hover:bg-white/15">
+                  Change photo
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setNewProfilePhoto(e.target.files[0])}
+                    className="sr-only"
+                  />
+                </label>
               )}
             </div>
 
@@ -929,7 +953,7 @@ const ClientDashboard = () => {
               />
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-6 md:col-span-2">
 
               {editingProfile ? (
                 <>

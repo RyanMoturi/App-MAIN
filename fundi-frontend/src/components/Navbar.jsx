@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { CloseIcon, MenuIcon, ShieldIcon, ToolIcon, UserIcon } from './Icons';
+import BrandLogo from './BrandLogo';
 
 const Navbar = () => {
   const [role, setRole] = useState(null);
@@ -60,12 +61,9 @@ const Navbar = () => {
         <Link
           to="/"
           onClick={closeMenu}
-          className="flex items-center gap-3 text-xl font-bold text-gray-950"
+          className="flex items-center text-gray-950"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded bg-black text-white">
-            <ToolIcon className="h-5 w-5" />
-          </span>
-          Fundi-Link
+          <BrandLogo />
         </Link>
 
         <button
